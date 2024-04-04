@@ -1,0 +1,4 @@
+TODO:
+  -- implement single node dictionary that serves read/write requests(string -> integers)
+  -- implement a client that allows us to make lots request as such
+  -- add consensus
