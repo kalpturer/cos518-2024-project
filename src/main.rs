@@ -38,6 +38,7 @@ fn main() -> io::Result<()> {
         println!("replica address: {}", addrs[0]);
         println!("api address: {}", addrs[1]);
         
+        // convert String into SocketAddr into Address
         let replica_socket = SocketAddrV4::from_str(addrs[0]).unwrap();
         let api_socket = SocketAddrV4::from_str(addrs[1]).unwrap();
         let mut replica = Replica::new(1, (replica_socket.ip().octets(), replica_socket.port()), (api_socket.ip().octets(), api_socket.port()));
@@ -48,6 +49,7 @@ fn main() -> io::Result<()> {
         // debugging
         println!("client address: {}", addr);
         
+        // convert String into SocketAddr into Address
         let socket = SocketAddrV4::from_str(addr).unwrap();
         let _res = client::run_client((socket.ip().octets(), socket.port()));
     }
