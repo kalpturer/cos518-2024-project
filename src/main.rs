@@ -1,10 +1,9 @@
 pub mod network;
 pub mod types;
 
-use std::env;
 use std::str::FromStr;
 use network::client;
-use network::replica;
+use network::example_send;
 use network::replica::Replica;
 use smol::io;
 use clap::Parser;
@@ -49,7 +48,7 @@ fn main() -> io::Result<()> {
         println!("client address: {}", addr);
         
         let socket = SocketAddrV4::from_str(addr).unwrap();
-        let _res = client::run_client((socket.ip().octets(), socket.port()));
+        let _res = example_send::run_client((socket.ip().octets(), socket.port()));
     }
 
     Ok(())

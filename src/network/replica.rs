@@ -5,7 +5,9 @@ use smol::stream::StreamExt;
 use smol::Async;
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use tiny_http::{Response, Server};
 use crate::types::Address;
+use crate::network::message::CustomMessage;
 
 pub enum RequestType {
     Read,
@@ -29,6 +31,7 @@ pub enum Event {
     Pong(SocketAddr, String),
     ReadRequest(SocketAddr, String),
     WriteRequest(SocketAddr, String),
+    StructMessage(CustomMessage, SocketAddr, String),
 }
 
 impl Replica {
@@ -52,6 +55,7 @@ impl Replica {
             // Process client event and construct reply.
             let output = match event {
                 Event::Message(addr, msg) => format!("{} says: {}\n", addr, msg),
+                Event::StructMessage(j,_,_) => format!("json: {:?}\n", j),
                 Event::Ping(addr, _) => format!("Pong back to {}\n", addr),
                 _ => "None".to_string(),
             };
@@ -68,13 +72,15 @@ impl Replica {
 
         while let Some(line) = lines.next().await {
             let line = line?;
-            sender.send(Event::Message(addr, line)).await.ok();
+            let json : CustomMessage = serde_json::from_str(line.as_str())?;
+            sender.send(Event::StructMessage(json, addr, "test".to_string())).await.ok();
         }
         Ok(())
     }
 
     pub fn start(&mut self) -> io::Result<()>{
         smol::block_on(async {
+
             // listen incoming client connections
             let client_listener = Async::<TcpListener>::bind(([127, 0, 0, 1], 6000))?;
             println!(
