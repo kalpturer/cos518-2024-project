@@ -8,4 +8,5 @@ edition = "2021"
 [dependencies]
 async-channel = "2.2.1"
 async-dup = "1.2.4"
+clap = { version = "4.5.4", features = ["derive"] }
 smol = "2.0.0"
