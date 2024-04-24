@@ -15,16 +15,16 @@ pub enum RequestType {
 }
 
 pub struct Replica {
-    replica_id: u8,
-    replica_addr: Address,
-    api_addr: Address,
-    connections: Vec<Async<TcpStream>>,
+    id: u8,
+    addr: SocketAddr,
+    connections: Vec<SocketAddr>,
+    streams: Vec<Arc<Async<TcpStream>>>,
     log: Vec<(RequestType, String, String)>,
     state: HashMap<String, String>
 }
 
 pub enum Event {
-    Join(SocketAddr, Arc<Async<TcpStream>>),
+    Join(SocketAddr, Async<TcpStream>),
     Leave(SocketAddr),
     Message(SocketAddr, String),
     Ping(SocketAddr, String),
@@ -32,48 +32,70 @@ pub enum Event {
     ReadRequest(SocketAddr, String),
     WriteRequest(SocketAddr, String),
     StructMessage(CustomMessage, SocketAddr, String),
+    Forward(SocketAddr, String),
 }
 
 impl Replica {
-    pub fn new(id: u8, addr: Address, api: Address) -> Self {
+    pub fn new(id: u8, addr: SocketAddr, connections: Vec<SocketAddr>) -> Self {
         return Replica {
-            replica_id: id,
-            replica_addr: addr,
-            api_addr: api,
-            connections: Vec::new(),
+            id,
+            addr,
+            connections,
+            streams: Vec::new(),
             log: Vec::new(),
             state: HashMap::new()
         };
     }
 
-    pub fn connect_to_replica(&mut self, connection: Async<TcpStream>) {
-        self.connections.push(connection);
-    }
+    // pub fn connect_to_replica(&mut self, stream: Async<TcpStream>) {
+    //     self.streams.push(stream);
+    // }
 
-    pub async fn dispatch_to_client(receiver: Receiver<Event>) -> io::Result<()> {
+    pub async fn dispatch(receiver: Receiver<Event>, streams: Vec<Async<TcpStream>>) -> io::Result<()> {
         while let Ok(event) = receiver.recv().await {
-            // Process client event and construct reply.
-            let output = match event {
-                Event::Message(addr, msg) => format!("{} says: {}\n", addr, msg),
-                Event::StructMessage(j,_,_) => format!("json: {:?}\n", j),
-                Event::Ping(addr, _) => format!("Pong back to {}\n", addr),
-                _ => "None".to_string(),
-            };
+            // Process event and construct reply.
+            match event {
+                Event::Message(addr, msg) => {
+                    println!("{} says: {}", addr, msg);
 
-            print!("{}", output);
+                    for mut stream in &streams {
+                        let _ = stream.write_all(&msg.as_bytes()).await;
+                        println!("Forwarded message to {}", stream.get_ref().peer_addr()?);
+                    }
+
+                    
+
+                },
+                Event::StructMessage(j,_,_) => {
+                    println!("json: {:?}", j)
+                },
+                Event::Ping(addr, _) => {
+                    println!("Pong back to {}", addr)
+                },
+                _ => (),
+            };
         }
         Ok(())
     }
 
-    /// Reads requests from the client and forwards them to the dispatcher task.
-    async fn read_requests(sender: Sender<Event>, client: Arc<Async<TcpStream>>) -> io::Result<()> {
-        let addr = client.get_ref().peer_addr()?;
-        let mut lines = io::BufReader::new(client).lines();
+    /// Reads requests from the other party and forwards them to the dispatcher task.
+    async fn read_requests(sender: Sender<Event>, stream: Async<TcpStream>) -> io::Result<()> {
+        let addr = stream.get_ref().peer_addr()?;
+        let mut lines = io::BufReader::new(stream).lines();
 
         while let Some(line) = lines.next().await {
-            let line = line?;
-            let json : CustomMessage = serde_json::from_str(line.as_str())?;
-            sender.send(Event::StructMessage(json, addr, "test".to_string())).await.ok();
+            match line {
+                Ok(line) => {
+                    println!("Message received: {}", line);
+                    sender.send(Event::Message(addr, line)).await.ok();
+                    // let json : CustomMessage = serde_json::from_str(line.as_str())?;
+                    // sender.send(Event::StructMessage(json, addr, "test".to_string())).await.ok();
+                },
+                Err(e) => {
+                    println!("Error: {}", e);
+                }
+            }
+            
         }
         Ok(())
     }
@@ -81,32 +103,62 @@ impl Replica {
     pub fn start(&mut self) -> io::Result<()>{
         smol::block_on(async {
 
-            // listen incoming client connections
-            let client_listener = Async::<TcpListener>::bind(([127, 0, 0, 1], 6000))?;
+            // listen incoming connections
+            let listener = Async::<TcpListener>::bind(self.addr)?;
             println!(
-                "Listening client connections on {}",
-                client_listener.get_ref().local_addr()?
+                "Listening to connections on {}",
+                listener.get_ref().local_addr()?
             );
 
+            let mut streams = Vec::new();
+            // establish tcp connection with other replicas
+            for addr in self.connections.iter() {
+                let mut waiting: bool = false;
+
+                // keep trying until connection succeeds
+                loop {
+                    match Async::<TcpStream>::connect(*addr).await {
+                        Ok(stream) =>{
+
+                            // Intro messages.
+                            println!("Connected to {}", stream.get_ref().peer_addr()?);
+                            println!("My nickname: {}", stream.get_ref().local_addr()?);
+
+                            streams.push(stream);
+
+                            break
+                        }
+                        Err(_) => {
+                            if !waiting {
+                                println!("Waiting to connect to {}", addr);
+                                waiting = true;
+                            }
+                            
+                        }
+                    }
+                }
+            }
+
             let (sender, receiver) = unbounded();
-            smol::spawn(Replica::dispatch_to_client(receiver)).detach();
+            smol::spawn(Replica::dispatch(receiver, streams)).detach();
 
             loop {
                 // Accept the next connection.
-                let (stream, addr) = client_listener.accept().await?;
-                let client = Arc::new(stream);
+                let (stream, addr) = listener.accept().await?;
+                println!("{} can now send messages to {}", stream.get_ref().peer_addr()?, stream.get_ref().local_addr()?);
+            
                 let sender = sender.clone();
 
-                // Spawn a background task reading messages from the client.
+                // Spawn a background task reading messages from the other party.
                 smol::spawn(async move {
-                    // Client starts with a `Join` event.
-                    sender.send(Event::Join(addr, client.clone())).await.ok();
+                    // other party starts with a `Join` event.
+                    // sender.send(Event::Join(addr, stream)).await.ok();
 
-                    // Read messages from the client and ignore I/O errors when the client quits.
-                    Replica::read_requests(sender.clone(), client).await.ok();
+                    // Read messages from the other party and ignore I/O errors when the other party quits.
+                    Replica::read_requests(sender.clone(), stream).await.ok();
 
-                    // Client ends with a `Leave` event.
-                    sender.send(Event::Leave(addr)).await.ok();
+                    // other party ends with a `Leave` event.
+                    // sender.send(Event::Leave(addr)).await.ok();
                 })
                 .detach();
             }

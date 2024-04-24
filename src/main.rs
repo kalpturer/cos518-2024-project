@@ -7,50 +7,60 @@ use network::example_send;
 use network::replica::Replica;
 use smol::io;
 use clap::Parser;
-use std::net::SocketAddrV4;
+use std::net::SocketAddr;
 
 
 /// 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    /// List of replica and API address pairs (format: e.g., 127.0.0.1:6000/127.0.0.1:6001)
-    #[arg(short, long, value_delimiter = ' ', num_args = 1..)]
-    replicas: Vec<String>,
 
-    /// List of client addresses (format: e.g., 127.0.0.1:6000)
+    /// Address on which to listen for incoming messages (format: e.g., 127.0.0.1:6000)
+    #[arg(short, long)]
+    listener: Option<String>,
+
+    /// List of addresses to connect to (format: e.g., 127.0.0.1:6000)
     #[arg(short, long, value_delimiter = ' ', num_args = 1..)]
-    clients: Vec<String>,
+    connections: Vec<String>,
+
+    #[arg(short, long, default_value_t = 1)]
+    id: u8
+
 }
 
 
 fn main() -> io::Result<()> {
     let cli = Cli::parse();
 
-    for addrs in cli.replicas.iter() {
-        // debugging
-        println!("replica input: {}", addrs);
+    match cli.listener {
+        Some (lst) => {
+            // debugging
+            println!("listener: {}", lst);
 
-        let addrs = addrs.split("/").collect::<Vec<&str>>();
-
-        // debugging
-        println!("replica address: {}", addrs[0]);
-        println!("api address: {}", addrs[1]);
-        
-        // convert String into SocketAddr into Address
-        let replica_socket = SocketAddrV4::from_str(addrs[0]).unwrap();
-        let api_socket = SocketAddrV4::from_str(addrs[1]).unwrap();
-        let mut replica = Replica::new(1, (replica_socket.ip().octets(), replica_socket.port()), (api_socket.ip().octets(), api_socket.port()));
-        let _res = replica.start();
-    }
-
-    for addr in cli.clients.iter() {
-        // debugging
-        println!("client address: {}", addr);
-        
-        // convert String into SocketAddr into Address
-        let socket = SocketAddrV4::from_str(addr).unwrap();
-        let _res = example_send::run_client((socket.ip().octets(), socket.port()));
+            let mut connections = Vec::new();
+            for addr in cli.connections.iter() {
+                // debugging
+                println!("connection: {}", addr);
+                
+                // convert String into SocketAddr into Address
+                let connection = SocketAddr::from_str(addr).unwrap();
+                connections.push(connection);
+            }
+                
+            // convert String into SocketAddr into Address
+            let listener = SocketAddr::from_str(&lst).unwrap();
+            let mut replica = Replica::new(cli.id, listener, connections);
+            let _res = replica.start();
+        },
+        None => {
+            if cli.connections.len() == 0 {
+                println!("Client needs address to connect to")
+            }
+            else {
+                let socket = SocketAddr::from_str(&cli.connections[0]).unwrap();
+                let _res = client::run_client(socket);
+            }
+        }
     }
 
     Ok(())

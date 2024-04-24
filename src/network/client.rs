@@ -1,8 +1,9 @@
 use std::net::TcpStream;
 use smol::{future, io, Async, Unblock};
 use crate::types::Address;
+use std::net::SocketAddr;
 
-pub fn run_client(addr : Address) -> io::Result<()> {
+pub fn run_client(addr : SocketAddr) -> io::Result<()> {
     smol::block_on(async {
         
         // Connect to the server and create async stdin and stdout.
