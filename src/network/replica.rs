@@ -58,11 +58,12 @@ impl Replica {
 
                 },
                 Event::Forward(addr, msg) => {
-                    println!("{} says: {}", addr, msg);
+                    println!("{} forwarded: {}", addr, msg);
 
                     for mut stream in &streams {
                         let _ = stream.write_all("Acknowle\n".as_bytes()).await;
-                        println!("Acknowledged message from {}", stream.get_ref().peer_addr()?);
+                        println!("Acknowledged message from {}", addr);
+                        
                     }
 
                 },
@@ -88,6 +89,7 @@ impl Replica {
                 Ok(line) => {
                     println!("Message received: {}", line);
                     
+                    // First 8-bytes correspond to message type 
                     let event = &line[..8];
                     match event {
                         "Client  " => sender.send(Event::Message(addr, line[8..].to_string())).await.ok(),
