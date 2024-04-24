@@ -1,7 +1,6 @@
-use std::net::TcpStream;
+use std::net::{TcpStream, SocketAddr};
 use smol::{future, io, Async, Unblock};
-use crate::types::Address;
-use std::net::SocketAddr;
+use smol::io::AsyncWriteExt;
 
 pub fn run_client(addr : SocketAddr) -> io::Result<()> {
     smol::block_on(async {
@@ -22,6 +21,7 @@ pub fn run_client(addr : SocketAddr) -> io::Result<()> {
         // Wait until the standard input is closed or the connection is closed.
         future::race(
             async {
+                let _ = writer.write_all("Client  ".as_bytes()).await;
                 let res = io::copy(stdin, &mut writer).await;
                 println!("Quit!");
                 res

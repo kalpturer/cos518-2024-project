@@ -2,8 +2,7 @@ pub mod network;
 pub mod types;
 
 use std::str::FromStr;
-use network::client;
-use network::example_send;
+use network::{client, example_send};
 use network::replica::Replica;
 use smol::io;
 use clap::Parser;

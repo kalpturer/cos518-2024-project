@@ -1,12 +1,10 @@
 use async_channel::{unbounded, Receiver, Sender};
-use async_dup::Arc;
 use smol::io::{self, AsyncBufReadExt, AsyncWriteExt};
 use smol::stream::StreamExt;
 use smol::Async;
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use tiny_http::{Response, Server};
-use crate::types::Address;
 use crate::network::message::CustomMessage;
 
 pub enum RequestType {
@@ -18,14 +16,11 @@ pub struct Replica {
     id: u8,
     addr: SocketAddr,
     connections: Vec<SocketAddr>,
-    streams: Vec<Arc<Async<TcpStream>>>,
     log: Vec<(RequestType, String, String)>,
     state: HashMap<String, String>
 }
 
 pub enum Event {
-    Join(SocketAddr, Async<TcpStream>),
-    Leave(SocketAddr),
     Message(SocketAddr, String),
     Ping(SocketAddr, String),
     Pong(SocketAddr, String),
@@ -33,6 +28,7 @@ pub enum Event {
     WriteRequest(SocketAddr, String),
     StructMessage(CustomMessage, SocketAddr, String),
     Forward(SocketAddr, String),
+    Acknowledge(SocketAddr),
 }
 
 impl Replica {
@@ -41,15 +37,10 @@ impl Replica {
             id,
             addr,
             connections,
-            streams: Vec::new(),
             log: Vec::new(),
             state: HashMap::new()
         };
     }
-
-    // pub fn connect_to_replica(&mut self, stream: Async<TcpStream>) {
-    //     self.streams.push(stream);
-    // }
 
     pub async fn dispatch(receiver: Receiver<Event>, streams: Vec<Async<TcpStream>>) -> io::Result<()> {
         while let Ok(event) = receiver.recv().await {
@@ -59,11 +50,20 @@ impl Replica {
                     println!("{} says: {}", addr, msg);
 
                     for mut stream in &streams {
+                        let _ = stream.write_all("Forward ".as_bytes()).await;
                         let _ = stream.write_all(&msg.as_bytes()).await;
+                        let _ = stream.write_all("\n".as_bytes()).await;
                         println!("Forwarded message to {}", stream.get_ref().peer_addr()?);
                     }
 
-                    
+                },
+                Event::Forward(addr, msg) => {
+                    println!("{} says: {}", addr, msg);
+
+                    for mut stream in &streams {
+                        let _ = stream.write_all("Acknowle\n".as_bytes()).await;
+                        println!("Acknowledged message from {}", stream.get_ref().peer_addr()?);
+                    }
 
                 },
                 Event::StructMessage(j,_,_) => {
@@ -87,7 +87,15 @@ impl Replica {
             match line {
                 Ok(line) => {
                     println!("Message received: {}", line);
-                    sender.send(Event::Message(addr, line)).await.ok();
+                    
+                    let event = &line[..8];
+                    match event {
+                        "Client  " => sender.send(Event::Message(addr, line[8..].to_string())).await.ok(),
+                        "Forward " => sender.send(Event::Forward(addr, line[8..].to_string())).await.ok(),
+                        "Acknowle" => sender.send(Event::Acknowledge(addr)).await.ok(),
+                        _ => Some(()),
+                    };
+                    
                     // let json : CustomMessage = serde_json::from_str(line.as_str())?;
                     // sender.send(Event::StructMessage(json, addr, "test".to_string())).await.ok();
                 },
@@ -144,21 +152,17 @@ impl Replica {
 
             loop {
                 // Accept the next connection.
-                let (stream, addr) = listener.accept().await?;
+                let (stream, _) = listener.accept().await?;
                 println!("{} can now send messages to {}", stream.get_ref().peer_addr()?, stream.get_ref().local_addr()?);
             
                 let sender = sender.clone();
 
                 // Spawn a background task reading messages from the other party.
                 smol::spawn(async move {
-                    // other party starts with a `Join` event.
-                    // sender.send(Event::Join(addr, stream)).await.ok();
 
                     // Read messages from the other party and ignore I/O errors when the other party quits.
                     Replica::read_requests(sender.clone(), stream).await.ok();
 
-                    // other party ends with a `Leave` event.
-                    // sender.send(Event::Leave(addr)).await.ok();
                 })
                 .detach();
             }

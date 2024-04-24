@@ -1,11 +1,11 @@
-use crate::{network::message::CustomMessage, types::Address};
+use crate::network::message::CustomMessage;
 use smol::{
     io::{self, AsyncWriteExt},
     Async,
 };
-use std::net::TcpStream;
+use std::net::{TcpStream, SocketAddr};
 
-pub fn run_client(addr: Address) -> io::Result<()> {
+pub fn run_client(addr: SocketAddr) -> io::Result<()> {
     smol::block_on(async {
         // Connect to the server and create async stdin and stdout.
         let stream = Async::<TcpStream>::connect(addr).await?;
