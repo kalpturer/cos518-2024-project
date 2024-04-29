@@ -1,78 +1,272 @@
 use async_channel::{unbounded, Receiver, Sender};
+use serde::{Deserialize, Serialize};
 use smol::io::{self, AsyncBufReadExt, AsyncWriteExt};
 use smol::stream::StreamExt;
 use smol::Async;
-use std::collections::HashMap;
+use std::cmp::max;
+use std::collections::{HashMap, HashSet};
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use tiny_http::{Response, Server};
-use crate::network::message::CustomMessage;
+use std::sync::{Arc, Mutex};
 
-pub enum RequestType {
-    Read,
-    Write,
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ClientRequest {
+    Read(String, SocketAddr),
+    Write(String, String, SocketAddr),
+}
+
+pub type Instance = (u8, u64); // ID of replica, instance number
+
+pub type SeqNumber = u64;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum CommandState {
+    PreAccepted,
+    Accepted,
+    Committed,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ReplicaState {
+    instance_number: u64,
+    cmds: HashMap<Instance, (ClientRequest, SeqNumber, HashSet<Instance>, CommandState)>, // (cmd, seq, deps, state)
+    dict: HashMap<String, String>,
+    counting_preaccept: HashMap<Instance, i8>,
 }
 
 pub struct Replica {
+    replica_state: Arc<Mutex<ReplicaState>>,
     id: u8,
     addr: SocketAddr,
     connections: Vec<SocketAddr>,
-    log: Vec<(RequestType, String, String)>,
-    state: HashMap<String, String>
+    n: u8,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Event {
     Message(SocketAddr, String),
     Ping(SocketAddr, String),
     Pong(SocketAddr, String),
-    ReadRequest(SocketAddr, String),
-    WriteRequest(SocketAddr, String),
-    StructMessage(CustomMessage, SocketAddr, String),
     Forward(SocketAddr, String),
     Acknowledge(SocketAddr),
+    // EPaxos messages: --------------------------------------------------------
+    ReceivedRequest(ClientRequest),
+    // message(gamma, seq, deps, instance, sender)
+    PreAccept(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
+    PreAcceptOK(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
+    Accept(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
+    AcceptOK(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
+    Commit(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
 }
 
 impl Replica {
-    pub fn new(id: u8, addr: SocketAddr, connections: Vec<SocketAddr>) -> Self {
+    pub fn new(id: u8, addr: SocketAddr, connections: Vec<SocketAddr>, n: u8) -> Self {
         return Replica {
             id,
             addr,
             connections,
-            log: Vec::new(),
-            state: HashMap::new()
+            replica_state: Arc::new(Mutex::new(ReplicaState {
+                instance_number: 0,
+                cmds: HashMap::new(),
+                dict: HashMap::new(),
+                counting_preaccept: HashMap::new(),
+            })),
+            n,
         };
     }
 
-    pub async fn dispatch(receiver: Receiver<Event>, streams: Vec<Async<TcpStream>>) -> io::Result<()> {
+    // returns true if requests interfere, otherwise false
+    pub fn interfere(a: ClientRequest, b: ClientRequest) -> bool {
+        match (a, b) {
+            (ClientRequest::Write(k1, _, _), ClientRequest::Read(k2, _)) => {
+                if k1 == k2 {
+                    return true;
+                }
+                return false;
+            }
+            (ClientRequest::Read(k1, _), ClientRequest::Write(k2, _, _)) => {
+                if k1 == k2 {
+                    return true;
+                }
+                return false;
+            }
+            (ClientRequest::Write(k1, _, _), ClientRequest::Write(k2, _, _)) => {
+                if k1 == k2 {
+                    return true;
+                }
+                return false;
+            }
+            _ => false,
+        }
+    }
+
+    pub async fn reply_to_client(message: Option<String>, addr: SocketAddr) -> io::Result<()> {
+        loop {
+            match Async::<TcpStream>::connect(addr).await {
+                Ok(mut stream) => {
+                    // Intro messages.
+                    println!("Replying to client: {}", stream.get_ref().peer_addr()?);
+                    stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes());
+                }
+                Err(_) => {
+                    println!("Connection to client address {} failed", addr);
+                }
+            }
+        }
+    }
+
+    pub async fn dispatch(
+        replica_id: u8,
+        replica_addr: SocketAddr,
+        n: u8,
+        replica_state: Arc<Mutex<ReplicaState>>,
+        receiver: Receiver<Event>,
+        mut streams: HashMap<SocketAddr, Async<TcpStream>>,
+    ) -> io::Result<()> {
         while let Ok(event) = receiver.recv().await {
             // Process event and construct reply.
             match event {
                 Event::Message(addr, msg) => {
                     println!("{} says: {}", addr, msg);
 
-                    for mut stream in &streams {
+                    for (_, stream) in streams.iter_mut() {
                         let _ = stream.write_all("Forward ".as_bytes()).await;
                         let _ = stream.write_all(&msg.as_bytes()).await;
                         let _ = stream.write_all("\n".as_bytes()).await;
                         println!("Forwarded message to {}", stream.get_ref().peer_addr()?);
                     }
-
-                },
+                }
                 Event::Forward(addr, msg) => {
                     println!("{} forwarded: {}", addr, msg);
 
-                    for mut stream in &streams {
+                    for (_, stream) in streams.iter_mut() {
                         let _ = stream.write_all("Acknowle\n".as_bytes()).await;
                         println!("Acknowledged message from {}", addr);
-                        
                     }
-
-                },
-                Event::StructMessage(j,_,_) => {
-                    println!("json: {:?}", j)
-                },
+                }
                 Event::Ping(addr, _) => {
                     println!("Pong back to {}", addr)
-                },
+                }
+                // EPaxos client request handling
+                Event::ReceivedRequest(req) => {
+                    let mut rs = replica_state.lock().unwrap();
+                    rs.instance_number += 1;
+                    let ins = rs.instance_number;
+
+                    let mut seq = 1;
+                    let mut deps = HashSet::new();
+                    for (i, (ireq, sn, _, _)) in rs.cmds.clone().into_iter() {
+                        if Replica::interfere(req.clone(), ireq) {
+                            seq = max(seq, 1 + sn);
+                            deps.insert(i);
+                        }
+                    }
+                    rs.cmds.insert(
+                        (replica_id, ins),
+                        (req.clone(), seq, deps.clone(), CommandState::PreAccepted),
+                    );
+
+                    rs.counting_preaccept.insert((replica_id, ins), 0);
+
+                    drop(rs);
+                    // Send PreAccept to all:
+                    for (_, stream) in streams.iter_mut() {
+                        let message = Event::PreAccept(
+                            req.clone(),
+                            seq,
+                            deps.clone(),
+                            (replica_id, ins),
+                            replica_addr,
+                        );
+
+                        let _ = stream
+                            .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes());
+
+                        println!("Sent {:?} to {}", message, stream.get_ref().peer_addr()?);
+                    }
+                }
+                Event::PreAccept(req, cseq, cdeps, cins, leader) => {
+                    let mut rs = replica_state.lock().unwrap();
+                    let mut seq = cseq;
+                    let mut deps = cdeps;
+                    for (i, (ireq, sn, _, _)) in rs.cmds.clone().into_iter() {
+                        if Replica::interfere(req.clone(), ireq) {
+                            seq = max(seq, 1 + sn);
+                            deps.insert(i);
+                        }
+                    }
+
+                    rs.cmds.insert(
+                        cins,
+                        (req.clone(), seq, deps.clone(), CommandState::PreAccepted),
+                    );
+
+                    drop(rs);
+
+                    let stream = streams.get_mut(&leader).unwrap();
+                    let message =
+                        Event::PreAcceptOK(req.clone(), seq, deps.clone(), cins, replica_addr);
+                    let _ =
+                        stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes());
+
+                    println!("Replied {:?} to {}", message, stream.get_ref().peer_addr()?);
+                }
+                Event::PreAcceptOK(req, cseq, cdeps, cins, _) => {
+                    let mut rs = replica_state.lock().unwrap();
+                    let val = rs.counting_preaccept.get(&cins).cloned();
+                    match val {
+                        Some(v) => {
+                            rs.counting_preaccept.insert(cins, v + 1);
+                            // if threshold reached, commit
+                            if v + 1 >= (n / 2).try_into().unwrap() {
+                                // [FIXME] add check for verifying seq,deps received match later for slow path
+                                rs.cmds.insert(
+                                    cins,
+                                    (req.clone(), cseq, cdeps.clone(), CommandState::Committed),
+                                );
+
+                                // reply to client and update dict
+                                match req.clone() {
+                                    ClientRequest::Read(s, addr) => {
+                                        let message = rs.dict.get(&s).cloned();
+                                        smol::spawn(Replica::reply_to_client(message, addr))
+                                            .detach();
+                                    }
+                                    ClientRequest::Write(s, ss, addr) => {
+                                        let message = rs.dict.insert(s, ss);
+                                        smol::spawn(Replica::reply_to_client(message, addr))
+                                            .detach();
+                                    }
+                                }
+
+                                // notify other replicas about the commit
+                                for (_, stream) in streams.iter_mut() {
+                                    let message = Event::Commit(
+                                        req.clone(),
+                                        cseq,
+                                        cdeps.clone(),
+                                        cins,
+                                        replica_addr,
+                                    );
+            
+                                    let _ = stream
+                                        .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes());
+            
+                                    println!("Sent {:?} to {}", message, stream.get_ref().peer_addr()?);
+                                }
+                            }
+                        }
+                        None => (),
+                    }
+                    drop(rs);
+                }
+                Event::Commit(req, cseq, cdeps, cins, _) => {
+                    let mut rs = replica_state.lock().unwrap();
+                    rs.cmds.insert(
+                        cins,
+                        (req.clone(), cseq, cdeps.clone(), CommandState::Committed),
+                    );
+                    drop(rs);
+                }
                 _ => (),
             };
         }
@@ -81,38 +275,28 @@ impl Replica {
 
     /// Reads requests from the other party and forwards them to the dispatcher task.
     async fn read_requests(sender: Sender<Event>, stream: Async<TcpStream>) -> io::Result<()> {
-        let addr = stream.get_ref().peer_addr()?;
+        // read incoming lines until newlines
         let mut lines = io::BufReader::new(stream).lines();
 
         while let Some(line) = lines.next().await {
             match line {
                 Ok(line) => {
                     println!("Message received: {}", line);
-                    
-                    // First 8-bytes correspond to message type 
-                    let event = &line[..8];
-                    match event {
-                        "Client  " => sender.send(Event::Message(addr, line[8..].to_string())).await.ok(),
-                        "Forward " => sender.send(Event::Forward(addr, line[8..].to_string())).await.ok(),
-                        "Acknowle" => sender.send(Event::Acknowledge(addr)).await.ok(),
-                        _ => Some(()),
-                    };
-                    
-                    // let json : CustomMessage = serde_json::from_str(line.as_str())?;
-                    // sender.send(Event::StructMessage(json, addr, "test".to_string())).await.ok();
-                },
+
+                    // parse and forward to dispatch
+                    let json: Event = serde_json::from_str(line.as_str())?;
+                    sender.send(json).await.ok();
+                }
                 Err(e) => {
-                    println!("Error: {}", e);
+                    println!("Read_request Error: {}", e);
                 }
             }
-            
         }
         Ok(())
     }
 
-    pub fn start(&mut self) -> io::Result<()>{
+    pub fn start(&mut self) -> io::Result<()> {
         smol::block_on(async {
-
             // listen incoming connections
             let listener = Async::<TcpListener>::bind(self.addr)?;
             println!(
@@ -120,7 +304,7 @@ impl Replica {
                 listener.get_ref().local_addr()?
             );
 
-            let mut streams = Vec::new();
+            let mut streams: HashMap<SocketAddr, Async<TcpStream>> = HashMap::new();
             // establish tcp connection with other replicas
             for addr in self.connections.iter() {
                 let mut waiting: bool = false;
@@ -128,48 +312,54 @@ impl Replica {
                 // keep trying until connection succeeds
                 loop {
                     match Async::<TcpStream>::connect(*addr).await {
-                        Ok(stream) =>{
-
+                        Ok(stream) => {
                             // Intro messages.
                             println!("Connected to {}", stream.get_ref().peer_addr()?);
                             println!("My nickname: {}", stream.get_ref().local_addr()?);
 
-                            streams.push(stream);
+                            streams.insert(*addr, stream);
 
-                            break
+                            break;
                         }
                         Err(_) => {
                             if !waiting {
                                 println!("Waiting to connect to {}", addr);
                                 waiting = true;
                             }
-                            
                         }
                     }
                 }
             }
 
             let (sender, receiver) = unbounded();
-            smol::spawn(Replica::dispatch(receiver, streams)).detach();
+            smol::spawn(Replica::dispatch(
+                self.id,
+                self.addr,
+                self.n,
+                self.replica_state.clone(),
+                receiver,
+                streams,
+            ))
+            .detach();
 
             loop {
                 // Accept the next connection.
                 let (stream, _) = listener.accept().await?;
-                println!("{} can now send messages to {}", stream.get_ref().peer_addr()?, stream.get_ref().local_addr()?);
-            
+                println!(
+                    "{} can now send messages to {}",
+                    stream.get_ref().peer_addr()?,
+                    stream.get_ref().local_addr()?
+                );
+
                 let sender = sender.clone();
 
                 // Spawn a background task reading messages from the other party.
                 smol::spawn(async move {
-
                     // Read messages from the other party and ignore I/O errors when the other party quits.
                     Replica::read_requests(sender.clone(), stream).await.ok();
-
                 })
                 .detach();
             }
         })
     }
 }
-
-
