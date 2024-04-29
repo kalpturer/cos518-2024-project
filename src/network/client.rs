@@ -1,6 +1,26 @@
 use std::net::{TcpStream, SocketAddr};
 use smol::{future, io, Async, Unblock};
 use smol::io::AsyncWriteExt;
+use crate::network::replica::ClientRequest;
+
+pub fn send_client_request(addr: SocketAddr) -> io::Result<()> {
+    smol::block_on(async {
+        // Connect to the server and create async stdin and stdout.
+        let stream = Async::<TcpStream>::connect(addr).await?;
+
+        // Intro messages.
+        println!("Connected to {}", stream.get_ref().peer_addr()?);
+
+        let mut writer = &stream;
+
+        let mes = ClientRequest::Read("Hello".to_string(), addr);
+        let res = writer
+            .write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes())
+            .await;
+
+        res
+    })
+}
 
 pub fn run_client(addr : SocketAddr) -> io::Result<()> {
     smol::block_on(async {
