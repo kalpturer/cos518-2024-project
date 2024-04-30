@@ -2,7 +2,7 @@ use std::net::{TcpStream, SocketAddr};
 use smol::{future, io, Async, Unblock};
 use smol::io::{AsyncWriteExt, AsyncBufReadExt};
 use smol::stream::StreamExt;
-use crate::network::replica::ClientRequest;
+use crate::network::replica::{ClientRequest, Event::ReceivedRequest};
 
 pub fn send_client_request(addr: SocketAddr) -> io::Result<()> {
     smol::block_on(async {
@@ -59,7 +59,7 @@ pub fn debugging_client(addr: SocketAddr) -> io::Result<()> {
                         }
                     } else if mode == "r" {
                         mode = "q".to_string();
-                        let mes = ClientRequest::Read(line, addr);
+                        let mes = ReceivedRequest(ClientRequest::Read(line, addr));
                         let _ = writer.write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes()).await;
                         let _ = writer.write_all("\n".as_bytes()).await;
                         println!("Read or write? (r/w): ");
@@ -69,7 +69,7 @@ pub fn debugging_client(addr: SocketAddr) -> io::Result<()> {
                         println!("Value: ");
                     } else {
                         mode = "q".to_string();
-                        let mes = ClientRequest::Write(key.clone(), line, addr);
+                        let mes = ReceivedRequest(ClientRequest::Write(key.clone(), line, addr));
                         let _ = writer.write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes()).await;
                         let _ = writer.write_all("\n".as_bytes()).await;
                         println!("Read or write? (r/w): ");

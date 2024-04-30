@@ -106,6 +106,7 @@ impl Replica {
                     // Intro messages.
                     println!("Replying to client: {}", stream.get_ref().peer_addr()?);
                     let _ = stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes()).await;
+                    let _ = stream.write_all("\n".as_bytes()).await;
                 }
                 Err(_) => {
                     println!("Connection to client address {} failed", addr);
@@ -170,6 +171,7 @@ impl Replica {
                     rs.counting_preaccept.insert((replica_id, ins), 0);
 
                     drop(rs);
+
                     // Send PreAccept to all:
                     for (_, stream) in streams.iter_mut() {
                         let message = Event::PreAccept(
@@ -180,8 +182,11 @@ impl Replica {
                             replica_addr,
                         );
 
-                        let _ = stream
-                            .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes());
+                        // [FIXME] I think await needed but adding await throws an error, ostensibly due to lock
+                        // see https://users.rust-lang.org/t/future-is-not-send-as-this-value-is-used-across-an-await/92580
+                        // also see https://www.reddit.com/r/rust/comments/pnzple/future_is_not_send_as_this_value_is_used_across/
+                        let _ = stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes()).await;
+                        let _ = stream.write_all("\n".as_bytes()).await;
 
                         println!("Sent {:?} to {}", message, stream.get_ref().peer_addr()?);
                     }
@@ -207,8 +212,12 @@ impl Replica {
                     let stream = streams.get_mut(&leader).unwrap();
                     let message =
                         Event::PreAcceptOK(req.clone(), seq, deps.clone(), cins, replica_addr);
-                    let _ =
-                        stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes());
+
+                    // [FIXME] I think await needed but adding await throws an error, ostensibly due to lock
+                    // see https://users.rust-lang.org/t/future-is-not-send-as-this-value-is-used-across-an-await/92580
+                    // also see https://www.reddit.com/r/rust/comments/pnzple/future_is_not_send_as_this_value_is_used_across/
+                    let _ = stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes()).await;
+                    let _ = stream.write_all("\n".as_bytes()).await;
 
                     println!("Replied {:?} to {}", message, stream.get_ref().peer_addr()?);
                 }
@@ -249,9 +258,12 @@ impl Replica {
                                         cins,
                                         replica_addr,
                                     );
-            
-                                    let _ = stream
-                                        .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes());
+                                    
+                                    // [FIXME] I think await needed but adding await throws an error, ostensibly due to lock
+                                    // see https://users.rust-lang.org/t/future-is-not-send-as-this-value-is-used-across-an-await/92580
+                                    // also see https://www.reddit.com/r/rust/comments/pnzple/future_is_not_send_as_this_value_is_used_across/
+                                    let _ = stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes()).await;
+                                    let _ = stream.write_all("\n".as_bytes()).await;
             
                                     println!("Sent {:?} to {}", message, stream.get_ref().peer_addr()?);
                                 }
