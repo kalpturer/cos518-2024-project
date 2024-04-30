@@ -21,45 +21,62 @@ struct Cli {
     connections: Vec<String>,
 
     /// Replica ID
-    #[arg(short, long, default_value_t = 1)]
-    id: u8,
+    #[arg(short, long)]
+    id: Option<u8>,
 
     /// Total number of replicas
     #[arg(short, long, default_value_t = 3)]
     n: u8,
+
+    /// Client mode
+    #[arg(short, long, default_value_t = false)]
+    mode: bool,
+    
 }
 
 fn main() -> io::Result<()> {
     let cli = Cli::parse();
 
-    match cli.listener {
-        Some(lst) => {
-            // debugging
-            println!("listener: {}", lst);
-
-            let mut connections = Vec::new();
-            for addr in cli.connections.iter() {
+    if (cli.mode == false) && cli.connections.len() == usize::from(cli.n - 1)  {
+        match cli.listener {
+            Some(lst) => {
                 // debugging
-                println!("connection: {}", addr);
-
+                println!("listener: {}", lst);
+    
+                let mut connections = Vec::new();
+                for addr in cli.connections.iter() {
+                    // debugging
+                    println!("connection: {}", addr);
+    
+                    // convert String into SocketAddr into Address
+                    let connection = SocketAddr::from_str(addr).unwrap();
+                    connections.push(connection);
+                }
+    
                 // convert String into SocketAddr into Address
-                let connection = SocketAddr::from_str(addr).unwrap();
-                connections.push(connection);
+                let listener = SocketAddr::from_str(&lst).unwrap();
+                match cli.id {
+                    Some(id) => {
+                        let mut replica = Replica::new(id, listener, connections, cli.n);
+                        let _res = replica.start();
+                    }
+                    None => {
+                        println!("Need to specify replica id")
+                    }
+                }
+                
             }
-
-            // convert String into SocketAddr into Address
-            let listener = SocketAddr::from_str(&lst).unwrap();
-            let mut replica = Replica::new(cli.id, listener, connections, cli.n);
-            let _res = replica.start();
-        }
-        None => {
-            if cli.connections.len() == 0 {
-                println!("Client needs address to connect to")
-            } else {
-                let socket = SocketAddr::from_str(&cli.connections[0]).unwrap();
-                let _res = client::run_client(socket);
+            None => {
+                println!("Replica needs address to listen on")
             }
         }
+    } else if cli.mode == false {
+        println!("Number of connections does not match argument passed to --n (number of replicas)")        
+    } else if cli.connections.len() == 1 {
+        let socket = SocketAddr::from_str(&cli.connections[0]).unwrap();
+        let _res = client::debugging_client(socket);
+    } else {
+        println!("Client must connect to exactly one replica")
     }
 
     Ok(())

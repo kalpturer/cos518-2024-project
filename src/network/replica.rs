@@ -105,7 +105,7 @@ impl Replica {
                 Ok(mut stream) => {
                     // Intro messages.
                     println!("Replying to client: {}", stream.get_ref().peer_addr()?);
-                    stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes());
+                    let _ = stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes()).await;
                 }
                 Err(_) => {
                     println!("Connection to client address {} failed", addr);
@@ -125,6 +125,7 @@ impl Replica {
         while let Ok(event) = receiver.recv().await {
             // Process event and construct reply.
             match event {
+                // Testing network setup
                 Event::Message(addr, msg) => {
                     println!("{} says: {}", addr, msg);
 
@@ -146,6 +147,7 @@ impl Replica {
                 Event::Ping(addr, _) => {
                     println!("Pong back to {}", addr)
                 }
+
                 // EPaxos client request handling
                 Event::ReceivedRequest(req) => {
                     let mut rs = replica_state.lock().unwrap();
@@ -191,7 +193,7 @@ impl Replica {
                     for (i, (ireq, sn, _, _)) in rs.cmds.clone().into_iter() {
                         if Replica::interfere(req.clone(), ireq) {
                             seq = max(seq, 1 + sn);
-                            deps.insert(i);
+                            deps.insert(i);                
                         }
                     }
 
