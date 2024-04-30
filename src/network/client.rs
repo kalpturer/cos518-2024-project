@@ -1,3 +1,4 @@
+use std::io::{stdout, Write};
 use std::net::{TcpStream, SocketAddr};
 use smol::{future, io, Async, Unblock};
 use smol::io::{AsyncWriteExt, AsyncBufReadExt};
@@ -37,7 +38,8 @@ pub fn debugging_client(addr: SocketAddr) -> io::Result<()> {
 
         let mut writer = &stream;
 
-        println!("Read or write? (r/w): ");
+        print!("Read or write? (r/w): ");
+        let _ = stdout().flush();
 
         // read incoming lines until newlines
         let mut lines = io::BufReader::new(stdin).lines();
@@ -48,31 +50,34 @@ pub fn debugging_client(addr: SocketAddr) -> io::Result<()> {
         while let Some(line) = lines.next().await {
             match line {
                 Ok(line) => {
-                    println!("Message received: {}", line);
-
                     if mode == "q" {
                         if line == "r" || line == "w"  {
                             mode = line;
-                            println!("Key: ");
+                            print!("Key: ");
+                            let _ = stdout().flush();
                         } else {
-                            println!("Read or write? (r/w): ");
+                            print!("Read or write? (r/w): ");
+                            let _ = stdout().flush();
                         }
                     } else if mode == "r" {
                         mode = "q".to_string();
                         let mes = ReceivedRequest(ClientRequest::Read(line, addr));
                         let _ = writer.write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes()).await;
                         let _ = writer.write_all("\n".as_bytes()).await;
-                        println!("Read or write? (r/w): ");
+                        print!("Read or write? (r/w): ");
+                        let _ = stdout().flush();
                     } else if mode == "w" {
                         mode = "v".to_string();
                         key = line.clone();
-                        println!("Value: ");
+                        print!("Value: ");
+                        let _ = stdout().flush();
                     } else {
                         mode = "q".to_string();
                         let mes = ReceivedRequest(ClientRequest::Write(key.clone(), line, addr));
                         let _ = writer.write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes()).await;
                         let _ = writer.write_all("\n".as_bytes()).await;
-                        println!("Read or write? (r/w): ");
+                        print!("Read or write? (r/w): ");
+                        let _ = stdout().flush();
                     }
                 }
                 Err(e) => {

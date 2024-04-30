@@ -115,6 +115,97 @@ impl Replica {
         }
     }
 
+
+    pub fn atomic_request_preaccept(
+        replica_id: u8,
+        replica_state: Arc<Mutex<ReplicaState>>,
+        req: ClientRequest, 
+        cseq: u64, 
+        cdeps: HashSet<(u8, u64)>, 
+        cins: Option<(u8, u64)>, 
+    ) -> (u64, HashSet<(u8, u64)>, (u8, u64)) {
+        let mut rs = replica_state.lock().unwrap();
+
+        let mut seq = cseq;
+        let mut deps = cdeps;
+        for (i, (ireq, sn, _, _)) in rs.cmds.clone().into_iter() {
+            if Replica::interfere(req.clone(), ireq) {
+                seq = max(seq, 1 + sn);
+                deps.insert(i);
+            }
+        }
+
+        match cins {
+            Some(cins) => {
+                // replica_id is not command leader
+                rs.cmds.insert(
+                    cins,
+                    (req.clone(), seq, deps.clone(), CommandState::PreAccepted),
+                );
+
+                // if replica_id is not the command leader, then no need to track number of preaccepts
+
+                drop(rs);
+
+                return (seq, deps, cins);   
+
+            },
+            _ => {
+                // replica_id is command leader
+                rs.instance_number += 1;
+                let ins = rs.instance_number;
+                rs.cmds.insert(
+                    (replica_id, ins),
+                    (req.clone(), seq, deps.clone(), CommandState::PreAccepted),
+                );
+
+                rs.counting_preaccept.insert((replica_id, ins), 0);
+
+                drop(rs);
+
+                return (seq, deps, (replica_id, ins));
+            }
+        }
+    }
+
+
+    pub fn atomic_preaccept_ok(
+        replica_state: Arc<Mutex<ReplicaState>>,
+        cins: (u8, u64), 
+    ) -> i8 {
+        let mut rs = replica_state.lock().unwrap();
+        let val = rs.counting_preaccept.get(&cins).cloned();
+        match val {
+            Some(v) => {
+                rs.counting_preaccept.insert(cins, v + 1);
+                drop(rs);
+                return v + 1;
+            }
+            None => {
+                // this part of the code should never be reached
+                drop(rs);
+                return -1;
+            }
+        }
+        
+    }
+
+    pub fn atomic_commit(
+        replica_state: Arc<Mutex<ReplicaState>>,
+        req: ClientRequest, 
+        cseq: u64, 
+        cdeps: HashSet<(u8, u64)>, 
+        cins: (u8, u64), 
+    ) -> () {
+        let mut rs = replica_state.lock().unwrap();
+        rs.cmds.insert(
+            cins,
+            (req.clone(), cseq, cdeps.clone(), CommandState::Committed),
+        );
+        drop(rs);
+    }
+
+
     pub async fn dispatch(
         replica_id: u8,
         replica_addr: SocketAddr,
@@ -151,26 +242,7 @@ impl Replica {
 
                 // EPaxos client request handling
                 Event::ReceivedRequest(req) => {
-                    let mut rs = replica_state.lock().unwrap();
-                    rs.instance_number += 1;
-                    let ins = rs.instance_number;
-
-                    let mut seq = 1;
-                    let mut deps = HashSet::new();
-                    for (i, (ireq, sn, _, _)) in rs.cmds.clone().into_iter() {
-                        if Replica::interfere(req.clone(), ireq) {
-                            seq = max(seq, 1 + sn);
-                            deps.insert(i);
-                        }
-                    }
-                    rs.cmds.insert(
-                        (replica_id, ins),
-                        (req.clone(), seq, deps.clone(), CommandState::PreAccepted),
-                    );
-
-                    rs.counting_preaccept.insert((replica_id, ins), 0);
-
-                    drop(rs);
+                    let (seq, deps, ins) = Replica::atomic_request_preaccept(replica_id, replica_state.clone(), req.clone(), 1, HashSet::new(), None);
 
                     // Send PreAccept to all:
                     for (_, stream) in streams.iter_mut() {
@@ -178,13 +250,10 @@ impl Replica {
                             req.clone(),
                             seq,
                             deps.clone(),
-                            (replica_id, ins),
+                            ins,
                             replica_addr,
                         );
 
-                        // [FIXME] I think await needed but adding await throws an error, ostensibly due to lock
-                        // see https://users.rust-lang.org/t/future-is-not-send-as-this-value-is-used-across-an-await/92580
-                        // also see https://www.reddit.com/r/rust/comments/pnzple/future_is_not_send_as_this_value_is_used_across/
                         let _ = stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes()).await;
                         let _ = stream.write_all("\n".as_bytes()).await;
 
@@ -192,94 +261,44 @@ impl Replica {
                     }
                 }
                 Event::PreAccept(req, cseq, cdeps, cins, leader) => {
-                    let mut rs = replica_state.lock().unwrap();
-                    let mut seq = cseq;
-                    let mut deps = cdeps;
-                    for (i, (ireq, sn, _, _)) in rs.cmds.clone().into_iter() {
-                        if Replica::interfere(req.clone(), ireq) {
-                            seq = max(seq, 1 + sn);
-                            deps.insert(i);                
-                        }
-                    }
-
-                    rs.cmds.insert(
-                        cins,
-                        (req.clone(), seq, deps.clone(), CommandState::PreAccepted),
-                    );
-
-                    drop(rs);
+                    let (seq, deps, _) = Replica::atomic_request_preaccept(replica_id, replica_state.clone(), req.clone(), cseq, cdeps, Some(cins));
 
                     let stream = streams.get_mut(&leader).unwrap();
-                    let message =
-                        Event::PreAcceptOK(req.clone(), seq, deps.clone(), cins, replica_addr);
+                    let message = Event::PreAcceptOK(req.clone(), seq, deps.clone(), cins, replica_addr);
 
-                    // [FIXME] I think await needed but adding await throws an error, ostensibly due to lock
-                    // see https://users.rust-lang.org/t/future-is-not-send-as-this-value-is-used-across-an-await/92580
-                    // also see https://www.reddit.com/r/rust/comments/pnzple/future_is_not_send_as_this_value_is_used_across/
+                    
                     let _ = stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes()).await;
                     let _ = stream.write_all("\n".as_bytes()).await;
 
                     println!("Replied {:?} to {}", message, stream.get_ref().peer_addr()?);
                 }
                 Event::PreAcceptOK(req, cseq, cdeps, cins, _) => {
-                    let mut rs = replica_state.lock().unwrap();
-                    let val = rs.counting_preaccept.get(&cins).cloned();
-                    match val {
-                        Some(v) => {
-                            rs.counting_preaccept.insert(cins, v + 1);
-                            // if threshold reached, commit
-                            if v + 1 >= (n / 2).try_into().unwrap() {
-                                // [FIXME] add check for verifying seq,deps received match later for slow path
-                                rs.cmds.insert(
-                                    cins,
-                                    (req.clone(), cseq, cdeps.clone(), CommandState::Committed),
-                                );
+                    let n_preaccept_ok = Replica::atomic_preaccept_ok(replica_state.clone(), cins);
 
-                                // reply to client and update dict
-                                match req.clone() {
-                                    ClientRequest::Read(s, addr) => {
-                                        let message = rs.dict.get(&s).cloned();
-                                        smol::spawn(Replica::reply_to_client(message, addr))
-                                            .detach();
-                                    }
-                                    ClientRequest::Write(s, ss, addr) => {
-                                        let message = rs.dict.insert(s, ss);
-                                        smol::spawn(Replica::reply_to_client(message, addr))
-                                            .detach();
-                                    }
-                                }
+                    if n_preaccept_ok == -1 {
+                        println!("PreAcceptOK received before any PreAccept sent");
+                    } else if n_preaccept_ok >= (n / 2).try_into().unwrap() {
+                        Replica::atomic_commit(replica_state.clone(), req.clone(), cseq, cdeps.clone(), cins);
 
-                                // notify other replicas about the commit
-                                for (_, stream) in streams.iter_mut() {
-                                    let message = Event::Commit(
-                                        req.clone(),
-                                        cseq,
-                                        cdeps.clone(),
-                                        cins,
-                                        replica_addr,
-                                    );
-                                    
-                                    // [FIXME] I think await needed but adding await throws an error, ostensibly due to lock
-                                    // see https://users.rust-lang.org/t/future-is-not-send-as-this-value-is-used-across-an-await/92580
-                                    // also see https://www.reddit.com/r/rust/comments/pnzple/future_is_not_send_as_this_value_is_used_across/
-                                    let _ = stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes()).await;
-                                    let _ = stream.write_all("\n".as_bytes()).await;
-            
-                                    println!("Sent {:?} to {}", message, stream.get_ref().peer_addr()?);
-                                }
-                            }
+                        // notify other replicas about the commit
+                        for (_, stream) in streams.iter_mut() {
+                            let message = Event::Commit(
+                                req.clone(),
+                                cseq,
+                                cdeps.clone(),
+                                cins,
+                                replica_addr,
+                            );
+                            
+                            let _ = stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes()).await;
+                            let _ = stream.write_all("\n".as_bytes()).await;
+    
+                            println!("Sent {:?} to {}", message, stream.get_ref().peer_addr()?);
                         }
-                        None => (),
                     }
-                    drop(rs);
                 }
                 Event::Commit(req, cseq, cdeps, cins, _) => {
-                    let mut rs = replica_state.lock().unwrap();
-                    rs.cmds.insert(
-                        cins,
-                        (req.clone(), cseq, cdeps.clone(), CommandState::Committed),
-                    );
-                    drop(rs);
+                    Replica::atomic_commit(replica_state.clone(), req, cseq, cdeps, cins);
                 }
                 _ => (),
             };
