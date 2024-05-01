@@ -5,6 +5,8 @@ use smol::stream::StreamExt;
 use smol::Async;
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::Write;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 
@@ -33,14 +35,6 @@ pub struct ReplicaState {
     counting_preaccept: HashMap<Instance, i8>,
 }
 
-pub struct Replica {
-    replica_state: Arc<Mutex<ReplicaState>>,
-    id: u8,
-    addr: SocketAddr,
-    connections: Vec<SocketAddr>,
-    n: u8,
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Event {
     Message(SocketAddr, String),
@@ -48,6 +42,7 @@ pub enum Event {
     Pong(SocketAddr, String),
     Forward(SocketAddr, String),
     Acknowledge(SocketAddr),
+    SaveState,
     // EPaxos messages: --------------------------------------------------------
     ReceivedRequest(ClientRequest),
     // message(gamma, seq, deps, instance, sender)
@@ -56,6 +51,14 @@ pub enum Event {
     Accept(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
     AcceptOK(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
     Commit(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
+}
+
+pub struct Replica {
+    replica_state: Arc<Mutex<ReplicaState>>,
+    id: u8,
+    addr: SocketAddr,
+    connections: Vec<SocketAddr>,
+    n: u8,
 }
 
 impl Replica {
@@ -72,6 +75,61 @@ impl Replica {
             })),
             n,
         };
+    }
+
+    pub fn format_log(n: u8, replica_state: Arc<Mutex<ReplicaState>>) -> String {
+        let mut rs = replica_state.lock().unwrap();
+
+        fn key_to_string(key: String) -> String {
+            let ans: String = if key.len() < 4 {
+                let mut formatted = key.clone();
+                formatted.push_str("_".repeat(4 - key.len()).as_str());
+                formatted
+            } else {
+                key.chars().take(4).collect()
+            };
+            return ans;
+        }
+
+        let max_num = rs.cmds.keys().map(|x| -> u64 { x.1 }).max().unwrap();
+
+        let mut log = vec![vec!["Empty[----]".to_string(); max_num as usize]; n.into()];
+        for ((id, num), (req, _, _, _)) in rs.cmds.clone().into_iter() {
+            match req {
+                ClientRequest::Read(key, _) => {
+                    log[(id - 1) as usize][(num - 1) as usize] = format!(
+                        "{}{}{}",
+                        "Read-[".to_string(),
+                        key_to_string(key),
+                        "]".to_string()
+                    );
+                }
+                ClientRequest::Write(key, val, _) => {
+                    log[(id - 1) as usize][(num - 1) as usize] = format!(
+                        "{}{}{}",
+                        "Write[".to_string(),
+                        key_to_string(key),
+                        "]".to_string()
+                    );
+                }
+            }
+        }
+
+        let mut ans = "".to_string();
+        ans.push_str("BEGIN CMD LOG: --------------------------------------------\n");
+        let mut i = 1;
+        for row in &log {
+            ans.push_str(format!("ID: {} -> ", i).as_str());
+            i += 1;
+            for cmd in row {
+                ans.push_str(format!("{:<12} ", cmd).as_str());
+            }
+            ans.push_str("\n");
+        }
+        ans.push_str("END CMD LOG: ----------------------------------------------\n");
+
+        drop(rs);
+        return ans;
     }
 
     // returns true if requests interfere, otherwise false
@@ -105,7 +163,9 @@ impl Replica {
                 Ok(mut stream) => {
                     // Intro messages.
                     println!("Replying to client: {}", stream.get_ref().peer_addr()?);
-                    let _ = stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes()).await;
+                    let _ = stream
+                        .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())
+                        .await;
                     let _ = stream.write_all("\n".as_bytes()).await;
                 }
                 Err(_) => {
@@ -115,14 +175,13 @@ impl Replica {
         }
     }
 
-
     pub fn atomic_request_preaccept(
         replica_id: u8,
         replica_state: Arc<Mutex<ReplicaState>>,
-        req: ClientRequest, 
-        cseq: u64, 
-        cdeps: HashSet<(u8, u64)>, 
-        cins: Option<(u8, u64)>, 
+        req: ClientRequest,
+        cseq: u64,
+        cdeps: HashSet<(u8, u64)>,
+        cins: Option<(u8, u64)>,
     ) -> (u64, HashSet<(u8, u64)>, (u8, u64)) {
         let mut rs = replica_state.lock().unwrap();
 
@@ -147,9 +206,8 @@ impl Replica {
 
                 drop(rs);
 
-                return (seq, deps, cins);   
-
-            },
+                return (seq, deps, cins);
+            }
             _ => {
                 // replica_id is command leader
                 rs.instance_number += 1;
@@ -168,11 +226,7 @@ impl Replica {
         }
     }
 
-
-    pub fn atomic_preaccept_ok(
-        replica_state: Arc<Mutex<ReplicaState>>,
-        cins: (u8, u64), 
-    ) -> i8 {
+    pub fn atomic_preaccept_ok(replica_state: Arc<Mutex<ReplicaState>>, cins: (u8, u64)) -> i8 {
         let mut rs = replica_state.lock().unwrap();
         let val = rs.counting_preaccept.get(&cins).cloned();
         match val {
@@ -187,15 +241,15 @@ impl Replica {
                 return -1;
             }
         }
-        
     }
 
     pub fn atomic_commit(
+        n: u8,
         replica_state: Arc<Mutex<ReplicaState>>,
-        req: ClientRequest, 
-        cseq: u64, 
-        cdeps: HashSet<(u8, u64)>, 
-        cins: (u8, u64), 
+        req: ClientRequest,
+        cseq: u64,
+        cdeps: HashSet<(u8, u64)>,
+        cins: (u8, u64),
     ) -> () {
         let mut rs = replica_state.lock().unwrap();
         rs.cmds.insert(
@@ -203,8 +257,8 @@ impl Replica {
             (req.clone(), cseq, cdeps.clone(), CommandState::Committed),
         );
         drop(rs);
+        println!("{}", Replica::format_log(n, replica_state));
     }
-
 
     pub async fn dispatch(
         replica_id: u8,
@@ -239,35 +293,52 @@ impl Replica {
                 Event::Ping(addr, _) => {
                     println!("Pong back to {}", addr)
                 }
-
+                Event::SaveState => {
+                    let formatted_state = Replica::format_log(n, replica_state.clone());
+                    let mut file = File::create(format!("id_{}.txt", replica_id))?;
+                    file.write_all(formatted_state.as_bytes())?;
+                }
                 // EPaxos client request handling
                 Event::ReceivedRequest(req) => {
-                    let (seq, deps, ins) = Replica::atomic_request_preaccept(replica_id, replica_state.clone(), req.clone(), 1, HashSet::new(), None);
+                    let (seq, deps, ins) = Replica::atomic_request_preaccept(
+                        replica_id,
+                        replica_state.clone(),
+                        req.clone(),
+                        1,
+                        HashSet::new(),
+                        None,
+                    );
 
                     // Send PreAccept to all:
                     for (_, stream) in streams.iter_mut() {
-                        let message = Event::PreAccept(
-                            req.clone(),
-                            seq,
-                            deps.clone(),
-                            ins,
-                            replica_addr,
-                        );
+                        let message =
+                            Event::PreAccept(req.clone(), seq, deps.clone(), ins, replica_addr);
 
-                        let _ = stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes()).await;
+                        let _ = stream
+                            .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())
+                            .await;
                         let _ = stream.write_all("\n".as_bytes()).await;
 
                         println!("Sent {:?} to {}", message, stream.get_ref().peer_addr()?);
                     }
                 }
                 Event::PreAccept(req, cseq, cdeps, cins, leader) => {
-                    let (seq, deps, _) = Replica::atomic_request_preaccept(replica_id, replica_state.clone(), req.clone(), cseq, cdeps, Some(cins));
+                    let (seq, deps, _) = Replica::atomic_request_preaccept(
+                        replica_id,
+                        replica_state.clone(),
+                        req.clone(),
+                        cseq,
+                        cdeps,
+                        Some(cins),
+                    );
 
                     let stream = streams.get_mut(&leader).unwrap();
-                    let message = Event::PreAcceptOK(req.clone(), seq, deps.clone(), cins, replica_addr);
+                    let message =
+                        Event::PreAcceptOK(req.clone(), seq, deps.clone(), cins, replica_addr);
 
-                    
-                    let _ = stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes()).await;
+                    let _ = stream
+                        .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())
+                        .await;
                     let _ = stream.write_all("\n".as_bytes()).await;
 
                     println!("Replied {:?} to {}", message, stream.get_ref().peer_addr()?);
@@ -278,27 +349,31 @@ impl Replica {
                     if n_preaccept_ok == -1 {
                         println!("PreAcceptOK received before any PreAccept sent");
                     } else if n_preaccept_ok >= (n / 2).try_into().unwrap() {
-                        Replica::atomic_commit(replica_state.clone(), req.clone(), cseq, cdeps.clone(), cins);
+                        Replica::atomic_commit(
+                            n,
+                            replica_state.clone(),
+                            req.clone(),
+                            cseq,
+                            cdeps.clone(),
+                            cins,
+                        );
 
                         // notify other replicas about the commit
                         for (_, stream) in streams.iter_mut() {
-                            let message = Event::Commit(
-                                req.clone(),
-                                cseq,
-                                cdeps.clone(),
-                                cins,
-                                replica_addr,
-                            );
-                            
-                            let _ = stream.write_all(serde_json::to_string(&message).ok().unwrap().as_bytes()).await;
+                            let message =
+                                Event::Commit(req.clone(), cseq, cdeps.clone(), cins, replica_addr);
+
+                            let _ = stream
+                                .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())
+                                .await;
                             let _ = stream.write_all("\n".as_bytes()).await;
-    
+
                             println!("Sent {:?} to {}", message, stream.get_ref().peer_addr()?);
                         }
                     }
                 }
                 Event::Commit(req, cseq, cdeps, cins, _) => {
-                    Replica::atomic_commit(replica_state.clone(), req, cseq, cdeps, cins);
+                    Replica::atomic_commit(n, replica_state.clone(), req, cseq, cdeps, cins);
                 }
                 _ => (),
             };
