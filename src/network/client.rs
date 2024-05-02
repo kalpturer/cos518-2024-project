@@ -1,6 +1,6 @@
 use crate::network::replica::{ClientRequest, Event::ReceivedRequest, Event::SaveState};
 use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
+use rand::Rng;
 use smol::io::{AsyncBufReadExt, AsyncWriteExt};
 use smol::stream::StreamExt;
 use smol::{future, io, Async, Unblock};
@@ -108,7 +108,7 @@ pub fn debugging_client(addr: SocketAddr) -> io::Result<()> {
     })
 }
 
-pub fn generator_client(addr: SocketAddr, conflict: f64, timesleep: u8) -> io::Result<()> {
+pub fn generator_client(addr: SocketAddr, conflict: f64, _timesleep: u8) -> io::Result<()> {
     smol::block_on(async {
         // Connect to the server
         let stream = Async::<TcpStream>::connect(addr).await?;
@@ -160,7 +160,6 @@ pub fn generator_client(addr: SocketAddr, conflict: f64, timesleep: u8) -> io::R
             }
             thread::sleep(Duration::from_secs(1));
         }
-        Ok(())
     })
 }
 

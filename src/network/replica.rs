@@ -78,7 +78,7 @@ impl Replica {
     }
 
     pub fn format_log(n: u8, replica_state: Arc<Mutex<ReplicaState>>) -> String {
-        let mut rs = replica_state.lock().unwrap();
+        let rs = replica_state.lock().unwrap();
 
         fn key_to_string(key: String) -> String {
             let ans: String = if key.len() < 4 {
@@ -104,7 +104,7 @@ impl Replica {
                         "]".to_string()
                     );
                 }
-                ClientRequest::Write(key, val, _) => {
+                ClientRequest::Write(key, _val, _) => {
                     log[(id - 1) as usize][(num - 1) as usize] = format!(
                         "{}{}{}",
                         "Write[".to_string(),
@@ -298,6 +298,7 @@ impl Replica {
                     let mut file = File::create(format!("id_{}.txt", replica_id))?;
                     file.write_all(formatted_state.as_bytes())?;
                 }
+
                 // EPaxos client request handling
                 Event::ReceivedRequest(req) => {
                     let (seq, deps, ins) = Replica::atomic_request_preaccept(
