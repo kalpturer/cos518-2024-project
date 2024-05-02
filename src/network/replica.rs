@@ -1,10 +1,13 @@
 use async_channel::{unbounded, Receiver, Sender};
+use petgraph::graph::DiGraph;
+use petgraph::algo::kosaraju_scc;
 use serde::{Deserialize, Serialize};
 use smol::io::{self, AsyncBufReadExt, AsyncWriteExt};
 use smol::stream::StreamExt;
 use smol::Async;
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::fs::File;
 use std::io::Write;
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -27,12 +30,24 @@ pub enum CommandState {
     Committed,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+impl fmt::Display for CommandState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            CommandState::PreAccepted => write!(f, "PreAccept"),
+            CommandState::Accepted => write!(f, "Accepted "),
+            CommandState::Committed => write!(f, "Committed"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct ReplicaState {
     instance_number: u64,
     cmds: HashMap<Instance, (ClientRequest, SeqNumber, HashSet<Instance>, CommandState)>, // (cmd, seq, deps, state)
     dict: HashMap<String, String>,
     counting_preaccept: HashMap<Instance, i8>,
+    dep_graph: DiGraph<Instance, ()>,
+    executed: HashSet<Instance>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -70,8 +85,10 @@ impl Replica {
             replica_state: Arc::new(Mutex::new(ReplicaState {
                 instance_number: 0,
                 cmds: HashMap::new(),
+                dep_graph: DiGraph::new(),
                 dict: HashMap::new(),
                 counting_preaccept: HashMap::new(),
+                executed: HashSet::new(),
             })),
             n,
         };
@@ -93,23 +110,35 @@ impl Replica {
 
         let max_num = rs.cmds.keys().map(|x| -> u64 { x.1 }).max().unwrap();
 
-        let mut log = vec![vec!["Empty[----]".to_string(); max_num as usize]; n.into()];
-        for ((id, num), (req, _, _, _)) in rs.cmds.clone().into_iter() {
+        let mut log =
+            vec![
+                vec!["Empty[----- ...................... -----]".to_string(); max_num as usize];
+                n.into()
+            ];
+        for ((id, num), (req, seq, _, status)) in rs.cmds.clone().into_iter() {
             match req {
                 ClientRequest::Read(key, _) => {
                     log[(id - 1) as usize][(num - 1) as usize] = format!(
-                        "{}{}{}",
-                        "Read-[".to_string(),
+                        "{}{}{}, {}{:<3}{}{}",
+                        ">>Read-[".to_string(),
                         key_to_string(key),
-                        "]".to_string()
+                        "]".to_string(),
+                        "Seq: ".to_string(),
+                        seq,
+                        " Status: ".to_string(),
+                        status,
                     );
                 }
-                ClientRequest::Write(key, _val, _) => {
+                ClientRequest::Write(key, _, _) => {
                     log[(id - 1) as usize][(num - 1) as usize] = format!(
-                        "{}{}{}",
-                        "Write[".to_string(),
+                        "{}{}{}, {}{:<3}{}{}",
+                        ">>Write[".to_string(),
                         key_to_string(key),
-                        "]".to_string()
+                        "]".to_string(),
+                        "Seq: ".to_string(),
+                        seq,
+                        " Status: ".to_string(),
+                        status,
                     );
                 }
             }
@@ -127,6 +156,15 @@ impl Replica {
             ans.push_str("\n");
         }
         ans.push_str("END CMD LOG: ----------------------------------------------\n");
+
+        ans.push_str("Dependency graph:\n");
+        ans.push_str(format!("{:?}\n", rs.dep_graph).as_str());
+        ans.push_str("\n");
+        ans.push_str("Dict Status:\n");
+        ans.push_str(format!("{:?}\n", rs.dict).as_str());
+        ans.push_str("\n");
+        ans.push_str("Executed command instances:\n");
+        ans.push_str(format!("{:?}\n", rs.executed).as_str());
 
         drop(rs);
         return ans;
@@ -157,6 +195,21 @@ impl Replica {
         }
     }
 
+    pub fn add_dependency(dep_g: &mut DiGraph<Instance, ()>, src: Instance, dst: Instance) {
+        // Check if the nodes exist, if not, add them and get their node indices
+        let snode = match dep_g.node_indices().find(|&n| dep_g[n] == src) {
+            Some(node) => node,
+            None => dep_g.add_node(src),
+        };
+        let dnode = match dep_g.node_indices().find(|&n| dep_g[n] == dst) {
+            Some(node) => node,
+            None => dep_g.add_node(dst),
+        };
+
+        // Add the edge
+        dep_g.update_edge(snode, dnode, ());
+    }
+
     pub async fn reply_to_client(message: Option<String>, addr: SocketAddr) -> io::Result<()> {
         loop {
             match Async::<TcpStream>::connect(addr).await {
@@ -173,6 +226,45 @@ impl Replica {
                 }
             }
         }
+    }
+
+    pub fn execute_command(replica_state: Arc<Mutex<ReplicaState>>) -> () {
+        let mut rs = replica_state.lock().unwrap();
+
+        let sccs = kosaraju_scc(&rs.dep_graph);
+        for mut sc in sccs { // this is in reverse topological order 
+            // sort each connected comp by seq number
+            sc.sort_by(|a, b| {
+                let a_node = rs.dep_graph.node_weight(*a).unwrap();
+                let b_node = rs.dep_graph.node_weight(*b).unwrap();
+                let a_seq = rs.cmds.get(a_node).unwrap().1;
+                let b_seq = rs.cmds.get(b_node).unwrap().1;
+                a_seq.cmp(&b_seq)
+            });
+            // execute unexecuted commands in this order
+            for node in sc {
+                let ins = rs.dep_graph.node_weight(node).unwrap().clone();
+                let (req, _, _, _) = rs.cmds.get(&ins).unwrap();
+                // execute if not already executed
+                if !rs.executed.contains(&ins) {
+                    let (mes, addr) = match req.clone() {
+                        ClientRequest::Read(key, addr) => {
+                            (rs.dict.get(&key).cloned(), addr)
+                        }
+                        ClientRequest::Write(key, val, addr) => {
+                            (rs.dict.insert(key, val), addr)
+                        }
+                    };
+                    smol::spawn(Replica::reply_to_client(mes, addr)).detach();
+                    // mark executed
+                    rs.executed.insert(ins);
+                } 
+                
+            }
+
+        }
+
+        drop(rs);
     }
 
     pub fn atomic_request_preaccept(
@@ -201,6 +293,10 @@ impl Replica {
                     cins,
                     (req.clone(), seq, deps.clone(), CommandState::PreAccepted),
                 );
+                // add dependencies to dep_graph
+                for d in deps.clone() {
+                    Replica::add_dependency(&mut rs.dep_graph, cins, d);
+                }
 
                 // if replica_id is not the command leader, then no need to track number of preaccepts
 
@@ -216,6 +312,10 @@ impl Replica {
                     (replica_id, ins),
                     (req.clone(), seq, deps.clone(), CommandState::PreAccepted),
                 );
+                // add dependencies to dep_graph
+                for d in deps.clone() {
+                    Replica::add_dependency(&mut rs.dep_graph, (replica_id, ins), d);
+                }
 
                 rs.counting_preaccept.insert((replica_id, ins), 0);
 
@@ -256,6 +356,10 @@ impl Replica {
             cins,
             (req.clone(), cseq, cdeps.clone(), CommandState::Committed),
         );
+        // add dependencies to dep_graph
+        for d in cdeps {
+            Replica::add_dependency(&mut rs.dep_graph, cins, d);
+        }
         drop(rs);
         println!("{}", Replica::format_log(n, replica_state));
     }
@@ -359,6 +463,8 @@ impl Replica {
                             cins,
                         );
 
+                        Replica::execute_command(replica_state.clone());
+
                         // notify other replicas about the commit
                         for (_, stream) in streams.iter_mut() {
                             let message =
@@ -375,6 +481,7 @@ impl Replica {
                 }
                 Event::Commit(req, cseq, cdeps, cins, _) => {
                     Replica::atomic_commit(n, replica_state.clone(), req, cseq, cdeps, cins);
+                    Replica::execute_command(replica_state.clone());
                 }
                 _ => (),
             };

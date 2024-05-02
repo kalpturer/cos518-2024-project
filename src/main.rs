@@ -41,7 +41,7 @@ struct Cli {
     time_sleep: u8,
 
     /// Conflict rate [0,1]
-    #[arg(short, long, default_value_t = 0.02)]
+    #[arg(short, long, default_value_t = 0.5)]
     rate: f64,
 
     /// Save - instruct replica to save its state on local disk, all other flags are ignored

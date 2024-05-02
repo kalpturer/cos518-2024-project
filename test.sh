@@ -45,10 +45,10 @@ PID6=$!
 sleep 1
 echo "Finished starting 3 client request generators"
 
-echo "Sleeping for 30 seconds"
+echo "Sleeping for 5 seconds"
 # Sleep for 30 seconds
-sleep 30
-echo "Finished sleeping for 30 seconds"
+sleep 5
+echo "Finished sleeping"
 
 
 echo "Saving replica states"
