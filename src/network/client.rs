@@ -4,6 +4,7 @@ use rand::{thread_rng, Rng};
 use smol::io::{AsyncBufReadExt, AsyncWriteExt};
 use smol::stream::StreamExt;
 use smol::{future, io, Async, Unblock};
+use core::time;
 use std::io::{stdout, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::thread;
@@ -145,7 +146,7 @@ pub fn generator_client(addr: SocketAddr, conflict: f64, timesleep: u8) -> io::R
                     .collect();
             }
 
-            if write_coin {
+            if (write_coin || conflict_coin) {
                 let mes = ReceivedRequest(ClientRequest::Write(key.clone(), key, addr));
                 let _ = writer
                     .write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes())
@@ -158,7 +159,7 @@ pub fn generator_client(addr: SocketAddr, conflict: f64, timesleep: u8) -> io::R
                     .await;
                 let _ = writer.write_all("\n".as_bytes()).await;
             }
-            thread::sleep(Duration::from_secs(1));
+            thread::sleep(Duration::from_secs(timesleep as u64));
         }
         Ok(())
     })
