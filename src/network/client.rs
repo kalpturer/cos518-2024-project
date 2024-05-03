@@ -108,7 +108,7 @@ pub fn debugging_client(addr: SocketAddr) -> io::Result<()> {
     })
 }
 
-pub fn generator_client(addr: SocketAddr, conflict: f64, _timesleep: u8) -> io::Result<()> {
+pub fn generator_client(addr: SocketAddr, conflict: f64, timesleep: u8) -> io::Result<()> {
     smol::block_on(async {
         // Connect to the server
         let stream = Async::<TcpStream>::connect(addr).await?;
@@ -145,7 +145,7 @@ pub fn generator_client(addr: SocketAddr, conflict: f64, _timesleep: u8) -> io::
                     .collect();
             }
 
-            if write_coin {
+            if write_coin || conflict_coin {
                 let mes = ReceivedRequest(ClientRequest::Write(key.clone(), key, addr));
                 let _ = writer
                     .write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes())
@@ -158,7 +158,7 @@ pub fn generator_client(addr: SocketAddr, conflict: f64, _timesleep: u8) -> io::
                     .await;
                 let _ = writer.write_all("\n".as_bytes()).await;
             }
-            thread::sleep(Duration::from_secs(1));
+            thread::sleep(Duration::from_secs(timesleep as u64));
         }
     })
 }

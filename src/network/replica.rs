@@ -2,6 +2,7 @@ use async_channel::{unbounded, Receiver, Sender};
 use petgraph::graph::DiGraph;
 use petgraph::algo::kosaraju_scc;
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 use smol::io::{self, AsyncBufReadExt, AsyncWriteExt};
 use smol::stream::StreamExt;
 use smol::Async;
@@ -13,6 +14,15 @@ use std::io::Write;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 
+
+#[serde_as]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq)]
+struct CommittedDeps {
+    #[serde_as(as = "Vec<(_, _)>")]
+    pub committed: HashMap<Instance, bool>,
+}
+
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ClientRequest {
     Read(String, SocketAddr),
@@ -23,7 +33,7 @@ pub type Instance = (u8, u64); // ID of replica, instance number
 
 pub type SeqNumber = u64;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum CommandState {
     PreAccepted,
     Accepted,
@@ -45,7 +55,7 @@ pub struct ReplicaState {
     instance_number: u64,
     cmds: HashMap<Instance, (ClientRequest, SeqNumber, HashSet<Instance>, CommandState)>, // (cmd, seq, deps, state)
     dict: HashMap<String, String>,
-    counting_preaccept: HashMap<Instance, i8>,
+    preaccept_replies: HashMap<Instance, Vec<(SeqNumber, HashMap<Instance, bool>)>>,
     dep_graph: DiGraph<Instance, ()>,
     executed: HashSet<Instance>,
 }
@@ -61,11 +71,13 @@ pub enum Event {
     // EPaxos messages: --------------------------------------------------------
     ReceivedRequest(ClientRequest),
     // message(gamma, seq, deps, instance, sender)
-    PreAccept(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
-    PreAcceptOK(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
+    PreAccept(ClientRequest, u64, HashMap<Instance, bool>, Instance, SocketAddr),
+    PreAcceptOK(ClientRequest, u64, HashMap<Instance, bool>, Instance, SocketAddr),
     Accept(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
     AcceptOK(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
     Commit(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
+    PreAcceptTest(ClientRequest, u64, CommittedDeps, Instance, SocketAddr),
+    PreAcceptOKTest(ClientRequest, u64, CommittedDeps, Instance, SocketAddr),
 }
 
 pub struct Replica {
@@ -87,7 +99,7 @@ impl Replica {
                 cmds: HashMap::new(),
                 dep_graph: DiGraph::new(),
                 dict: HashMap::new(),
-                counting_preaccept: HashMap::new(),
+                preaccept_replies: HashMap::new(),
                 executed: HashSet::new(),
             })),
             n,
@@ -259,9 +271,7 @@ impl Replica {
                     // mark executed
                     rs.executed.insert(ins);
                 } 
-                
             }
-
         }
 
         drop(rs);
@@ -271,36 +281,45 @@ impl Replica {
         replica_id: u8,
         replica_state: Arc<Mutex<ReplicaState>>,
         req: ClientRequest,
-        cseq: u64,
-        cdeps: HashSet<(u8, u64)>,
-        cins: Option<(u8, u64)>,
-    ) -> (u64, HashSet<(u8, u64)>, (u8, u64)) {
+        cseq: SeqNumber,
+        cdeps: HashMap<Instance, bool>,
+        cins: Option<Instance>,
+    ) -> (SeqNumber, HashMap<Instance, bool>, Instance) {
         let mut rs = replica_state.lock().unwrap();
+
+        // [FIXME] need to check if I have committed any existing dependencies
 
         let mut seq = cseq;
         let mut deps = cdeps;
-        for (i, (ireq, sn, _, _)) in rs.cmds.clone().into_iter() {
+        for (i, (ireq, sn, _, status)) in rs.cmds.clone().into_iter() {
             if Replica::interfere(req.clone(), ireq) {
                 seq = max(seq, 1 + sn);
-                deps.insert(i);
+                if status == CommandState::PreAccepted {
+                    deps.insert(i, false);
+                } else {
+                    deps.insert(i, true);
+                }
             }
         }
 
+        let deps_keys : HashSet<Instance> = deps.keys().cloned().collect();
         match cins {
             Some(cins) => {
                 // replica_id is not command leader
                 rs.cmds.insert(
                     cins,
-                    (req.clone(), seq, deps.clone(), CommandState::PreAccepted),
+                    (req.clone(), seq, deps_keys.clone(), CommandState::PreAccepted),
                 );
                 // add dependencies to dep_graph
-                for d in deps.clone() {
+                for d in deps_keys.clone() {
                     Replica::add_dependency(&mut rs.dep_graph, cins, d);
                 }
 
                 // if replica_id is not the command leader, then no need to track number of preaccepts
 
                 drop(rs);
+
+                println!("{}{:?}{:?}", seq, deps, cins);
 
                 return (seq, deps, cins);
             }
@@ -310,35 +329,167 @@ impl Replica {
                 let ins = rs.instance_number;
                 rs.cmds.insert(
                     (replica_id, ins),
-                    (req.clone(), seq, deps.clone(), CommandState::PreAccepted),
+                    (req.clone(), seq, deps_keys.clone(), CommandState::PreAccepted),
                 );
                 // add dependencies to dep_graph
-                for d in deps.clone() {
+                for d in deps_keys.clone() {
                     Replica::add_dependency(&mut rs.dep_graph, (replica_id, ins), d);
                 }
 
-                rs.counting_preaccept.insert((replica_id, ins), 0);
+                rs.preaccept_replies.insert((replica_id, ins), Vec::new());
 
                 drop(rs);
+
+                println!("{}{:?}{:?}", seq, deps, (replica_id, ins));
 
                 return (seq, deps, (replica_id, ins));
             }
         }
     }
 
-    pub fn atomic_preaccept_ok(replica_state: Arc<Mutex<ReplicaState>>, cins: (u8, u64)) -> i8 {
+    pub fn path(
+        n: u8,
+        replica_state: Arc<Mutex<ReplicaState>>, 
+        req: ClientRequest,
+        cseq: SeqNumber,
+        cdeps: HashMap<Instance, bool>,
+        cins: Instance
+    ) -> Option<(SeqNumber, HashSet<Instance>, bool)> {
         let mut rs = replica_state.lock().unwrap();
-        let val = rs.counting_preaccept.get(&cins).cloned();
-        match val {
-            Some(v) => {
-                rs.counting_preaccept.insert(cins, v + 1);
-                drop(rs);
-                return v + 1;
+        let preaccept_replies = rs.preaccept_replies.get(&cins).cloned();
+        match preaccept_replies {
+            Some(mut preaccept_replies) => {
+                // add preaccept reply to list of preaccept replies
+                preaccept_replies.push((cseq, cdeps.clone()));
+                rs.preaccept_replies.insert(cins, preaccept_replies.clone());
+
+                if preaccept_replies.len() >= (n / 2).into() {
+                    match rs.cmds.get(&cins).cloned() {
+                        Some(cmd) => {
+                            // if committed or executed, then this is a late PreAcceptOK
+                            if cmd.3 == CommandState::PreAccepted {
+                                if n == 3 {
+                                    // always take fast path and commit
+                                    let cdeps_keys: HashSet<Instance> = cdeps.keys().cloned().collect(); 
+                                    rs.cmds.insert(
+                                        cins,
+                                        (req.clone(), cseq, cdeps_keys.clone(), CommandState::Committed),
+                                    );
+            
+                                    // add dependencies to dep_graph
+                                    for d in cdeps_keys.clone() {
+                                        Replica::add_dependency(&mut rs.dep_graph, cins, d);
+                                    }
+            
+                                    drop(rs);
+            
+                                    return Some((cseq, cdeps_keys, true));
+            
+                                } else {
+                                    // n = 5
+                                    // to take fast path when n = 5, every dependence must have some replica in the
+                                    // quorum that has committed or executed it
+
+                                    // take max of seq and union of deps 
+                                    let mut same = true;
+                                    let mut union = preaccept_replies[0].clone();
+                                    for reply in &preaccept_replies[1..] {
+                                        // if seq numbers differ, then no fast path
+                                        if reply.0 != union.0 {
+                                            same = false;
+                                            // at this point, not going to take fast path
+                                            // when taking slow path, need to update seq to greatest seq seen
+                                            if reply.0 > union.0 {
+                                                union.0 = reply.0
+                                            }
+                                        }
+
+                                        for (k, v) in reply.1.clone().into_iter() {
+                                            match union.1.get(&k).cloned() {
+                                                // key in union so dependence already in union
+                                                Some(v_) => {
+                                                    // replica has committed the dependence but the leader has not
+                                                    // so update to reflect that someone has committed the dependence
+                                                    if (v == true) && (v_ == false) {
+                                                        union.1.insert(k, v);
+                                                    }
+                                                }
+                                                // key not in union so some replica had a different dependence
+                                                None => {
+                                                    same = false;
+                                                    union.1.insert(k, v);
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if same {
+                                        // check whether leader has committed any dependencies that the other 
+                                        // quorum replicas have not
+                                        for (k, v) in union.1.clone().into_iter() {
+                                            if !v {
+                                                match rs.cmds.get(&k).cloned() {
+                                                    Some(cmd_) => {
+                                                        if cmd_.3 == CommandState::PreAccepted {
+                                                            // no one has committed this dependence
+                                                            // so must take slow path
+                                                            drop(rs);
+                                                            return Some((union.0, union.1.keys().cloned().collect(), false));
+                                                        }
+                                                    }
+                                                    None => {
+                                                        // no one has committed this dependence
+                                                        // so must take slow path
+                                                        drop(rs);
+                                                        return Some((union.0, union.1.keys().cloned().collect(), false));
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // all seq and deps are the same, and every dep has some replica that has
+                                        // committed it; take fast path
+                                        let union_keys: HashSet<Instance> = union.1.keys().cloned().collect(); 
+                                        rs.cmds.insert(
+                                            cins,
+                                            (req.clone(), union.0, union_keys.clone(), CommandState::Committed),
+                                        );
+                
+                                        // add dependencies to dep_graph
+                                        for d in union_keys.clone() {
+                                            Replica::add_dependency(&mut rs.dep_graph, cins, d);
+                                        }
+                
+                                        drop(rs);
+                                        return Some((union.0, union_keys, true));
+                                    } else {
+                                        drop(rs);
+                                        return Some((union.0, union.1.keys().cloned().collect(),false));
+                                    }                 
+                                }
+                            } else {
+                                drop(rs);
+                                return None;
+                            }
+                        }
+                        None => {
+                            // this part of the code should never be reached
+                            drop(rs);
+                            println!("PreAcceptOK received before any PreAccept sent");
+                            return None;
+                        }
+                    }
+                } else {
+                    // insufficient number of PreAcceptOKs
+                    drop(rs);
+                    return None;
+                }
             }
             None => {
                 // this part of the code should never be reached
                 drop(rs);
-                return -1;
+                println!("PreAcceptOK received before any PreAccept sent");
+                return None;
             }
         }
     }
@@ -410,14 +561,15 @@ impl Replica {
                         replica_state.clone(),
                         req.clone(),
                         1,
-                        HashSet::new(),
+                        HashMap::new(),
                         None,
                     );
 
                     // Send PreAccept to all:
                     for (_, stream) in streams.iter_mut() {
+                        let deps:CommittedDeps = CommittedDeps { committed: deps.clone() };
                         let message =
-                            Event::PreAccept(req.clone(), seq, deps.clone(), ins, replica_addr);
+                            Event::PreAcceptTest(req.clone(), seq, deps.clone(), ins, replica_addr);
 
                         let _ = stream
                             .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())
@@ -427,19 +579,20 @@ impl Replica {
                         println!("Sent {:?} to {}", message, stream.get_ref().peer_addr()?);
                     }
                 }
-                Event::PreAccept(req, cseq, cdeps, cins, leader) => {
+                Event::PreAcceptTest(req, cseq, cdeps, cins, leader) => {
                     let (seq, deps, _) = Replica::atomic_request_preaccept(
                         replica_id,
                         replica_state.clone(),
                         req.clone(),
                         cseq,
-                        cdeps,
+                        cdeps.committed,
                         Some(cins),
                     );
 
                     let stream = streams.get_mut(&leader).unwrap();
+                    let deps:CommittedDeps = CommittedDeps { committed: deps.clone() };
                     let message =
-                        Event::PreAcceptOK(req.clone(), seq, deps.clone(), cins, replica_addr);
+                        Event::PreAcceptOKTest(req.clone(), seq, deps.clone(), cins, replica_addr);
 
                     let _ = stream
                         .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())
@@ -448,40 +601,39 @@ impl Replica {
 
                     println!("Replied {:?} to {}", message, stream.get_ref().peer_addr()?);
                 }
-                Event::PreAcceptOK(req, cseq, cdeps, cins, _) => {
-                    let n_preaccept_ok = Replica::atomic_preaccept_ok(replica_state.clone(), cins);
+                Event::PreAcceptOKTest(req, cseq, cdeps, cins, _) => {
+                    let path = Replica::path(n, replica_state.clone(), req.clone(), cseq, cdeps.committed, cins);
 
-                    if n_preaccept_ok == -1 {
-                        println!("PreAcceptOK received before any PreAccept sent");
-                    } else if n_preaccept_ok >= (n / 2).try_into().unwrap() {
-                        Replica::atomic_commit(
-                            n,
-                            replica_state.clone(),
-                            req.clone(),
-                            cseq,
-                            cdeps.clone(),
-                            cins,
-                        );
+                    match path {
+                        // either take fast or slow
+                        Some((seq, deps, take_fast)) => {
+                            if take_fast {
+                                // Replica::execute_command(replica_state.clone());
 
-                        Replica::execute_command(replica_state.clone());
+                                // notify other replicas about the commit
+                                for (_, stream) in streams.iter_mut() {
+                                    let message =
+                                        Event::Commit(req.clone(), seq, deps.clone(), cins, replica_addr);
 
-                        // notify other replicas about the commit
-                        for (_, stream) in streams.iter_mut() {
-                            let message =
-                                Event::Commit(req.clone(), cseq, cdeps.clone(), cins, replica_addr);
+                                    let _ = stream
+                                        .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())
+                                        .await;
+                                    let _ = stream.write_all("\n".as_bytes()).await;
 
-                            let _ = stream
-                                .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())
-                                .await;
-                            let _ = stream.write_all("\n".as_bytes()).await;
-
-                            println!("Sent {:?} to {}", message, stream.get_ref().peer_addr()?);
+                                    println!("Sent {:?} to {}", message, stream.get_ref().peer_addr()?);
+                                }
+                            } else {
+                                // take slow
+                                println!("slow")
+                            }
                         }
+                        // either not enough, late, or some error occurred (check log for error)
+                        None => ()
                     }
                 }
                 Event::Commit(req, cseq, cdeps, cins, _) => {
                     Replica::atomic_commit(n, replica_state.clone(), req, cseq, cdeps, cins);
-                    Replica::execute_command(replica_state.clone());
+                    // Replica::execute_command(replica_state.clone());
                 }
                 _ => (),
             };
