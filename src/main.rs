@@ -6,6 +6,7 @@ use network::client;
 use network::replica::Replica;
 use smol::io;
 use std::net::SocketAddr;
+use std::process::exit;
 use std::str::FromStr;
 
 ///
@@ -41,7 +42,7 @@ struct Cli {
     time_sleep: u8,
 
     /// Conflict rate [0,1]
-    #[arg(short, long, default_value_t = 0.5)]
+    #[arg(short, long, default_value_t = 0.1)]
     rate: f64,
 
     /// Save - instruct replica to save its state on local disk, all other flags are ignored
@@ -59,7 +60,14 @@ fn main() -> io::Result<()> {
         }
         (None, Some(addr)) => {
             let socket = SocketAddr::from_str(&addr).unwrap();
-            let _res = client::generator_client(socket, cli.rate, cli.time_sleep);
+            let listen_socket = match cli.listener {
+                Some(l) => SocketAddr::from_str(&l).unwrap(),
+                None => {
+                    println!("Listening address required for reply");
+                    exit(0);
+                }
+            };
+            let _res = client::generator_client(socket, listen_socket, cli.rate, cli.time_sleep);
         }
         (None, None) => {
             if (cli.debug_client == false) && cli.connections.len() == usize::from(cli.n - 1) {
