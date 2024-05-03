@@ -398,8 +398,9 @@ impl Replica {
                                     // always take fast path and commit
                                     let cdeps_keys: HashSet<Instance> = cdeps.keys().cloned().collect(); 
                                     Replica::update_state(&mut rs, req, cseq, cdeps_keys.clone(), cins, CommandState::Committed);
-            
                                     drop(rs);
+
+                                    println!("{}", Replica::format_log(n, replica_state.clone()));
 
                                     return Some((cseq, cdeps_keys, true));
                                 } else {
@@ -479,8 +480,9 @@ impl Replica {
                                         // committed it; take fast path
                                         let union_keys: HashSet<Instance> = union.1.keys().cloned().collect(); 
                                         Replica::update_state(&mut rs, req, union.0, union_keys.clone(), cins, CommandState::Committed);
-                
                                         drop(rs);
+
+                                        println!("{}", Replica::format_log(n, replica_state.clone()));
                                         return Some((union.0, union_keys, true));
                                     } else {
                                         drop(rs);
@@ -511,8 +513,8 @@ impl Replica {
             }
             None => {
                 // this part of the code should never be reached
-                drop(rs);
                 println!("PreAcceptOK received before any PreAccept sent");
+                drop(rs);
                 return None;
             }
         }
@@ -555,6 +557,8 @@ impl Replica {
                                 // commit
                                 Replica::update_state(&mut rs, req, cseq, cdeps, cins, CommandState::Committed);
                                 drop(rs);
+
+                                println!("{}", Replica::format_log(n, replica_state.clone()));
                                 return true;
                             } else {
                                 drop(rs);
@@ -671,7 +675,6 @@ impl Replica {
                 }
                 Event::PreAcceptOK(req, cseq, cdeps, cins, _) => {
                     let path = Replica::path(n, replica_state.clone(), req.clone(), cseq, cdeps.committed, cins);
-
                     match path {
                         // either take fast or slow
                         Some((seq, deps, take_fast)) => {
@@ -720,7 +723,7 @@ impl Replica {
                             }
                         }
                         // either not enough, late, or some error occurred (check log for error)
-                        None => (),
+                        None => ()
                     }
                 }
                 Event::Commit(req, cseq, cdeps, cins, _) => {
