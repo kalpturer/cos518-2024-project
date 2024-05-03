@@ -5,7 +5,7 @@ use smol::io::{AsyncBufReadExt, AsyncWriteExt};
 use smol::stream::StreamExt;
 use smol::{future, io, Async, Unblock};
 use std::io::{stdout, Write};
-use std::net::{SocketAddr, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::thread;
 use std::time::Duration;
 
@@ -108,14 +108,41 @@ pub fn debugging_client(addr: SocketAddr) -> io::Result<()> {
     })
 }
 
-pub fn generator_client(addr: SocketAddr, conflict: f64, timesleep: u8) -> io::Result<()> {
+pub fn generator_client(
+    addr: SocketAddr,
+    listen_addr: SocketAddr,
+    conflict: f64,
+    timesleep: u8,
+) -> io::Result<()> {
+    async fn print_incoming(listener: Async<TcpListener>) -> io::Result<()> {
+        loop {
+            // Accept the next connection.
+            let (stream, _) = listener.accept().await?;
+            let ref mut line = String::new();
+            io::BufReader::new(stream).read_line(line).await?;
+
+            println!("Reply received:");
+            // parse
+            let json: Option<String> = serde_json::from_str(line.as_str())?;
+            println!("{:?}", json);
+        }
+    }
+
     smol::block_on(async {
+        // Listen
+        let listener = Async::<TcpListener>::bind(listen_addr)?;
+        println!(
+            "Listening to connections on {}",
+            listener.get_ref().local_addr()?
+        );
+
+        smol::spawn(print_incoming(listener)).detach();
+
         // Connect to the server
         let stream = Async::<TcpStream>::connect(addr).await?;
 
         // Intro messages.
         println!("Connected to {}", stream.get_ref().peer_addr()?);
-        println!("My nickname: {}", stream.get_ref().local_addr()?);
 
         let mut writer = &stream;
 
@@ -146,13 +173,13 @@ pub fn generator_client(addr: SocketAddr, conflict: f64, timesleep: u8) -> io::R
             }
 
             if write_coin || conflict_coin {
-                let mes = ReceivedRequest(ClientRequest::Write(key.clone(), key, addr));
+                let mes = ReceivedRequest(ClientRequest::Write(key.clone(), key, listen_addr));
                 let _ = writer
                     .write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes())
                     .await;
                 let _ = writer.write_all("\n".as_bytes()).await;
             } else {
-                let mes = ReceivedRequest(ClientRequest::Read(key, addr));
+                let mes = ReceivedRequest(ClientRequest::Read(key, listen_addr));
                 let _ = writer
                     .write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes())
                     .await;

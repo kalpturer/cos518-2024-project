@@ -32,15 +32,15 @@ echo "Finished starting 3 replicas"
 
 echo "Starting 3 client request generators"
 # Start 3 clients, one for each replica that generate random requests
-./target/debug/project --gen 127.0.0.1:6000 > /dev/null 2>&1 &
+./target/debug/project --gen 127.0.0.1:6000 --listener 127.0.0.1:6001 > /dev/null 2>&1 &
 PID4=$!
 sleep 1
 
-./target/debug/project --gen 127.0.0.1:8000 > /dev/null 2>&1 &
+./target/debug/project --gen 127.0.0.1:8000 --listener 127.0.0.1:8001 > /dev/null 2>&1 &
 PID5=$!
 sleep 1
 
-./target/debug/project --gen 127.0.0.1:9000 > /dev/null 2>&1 &
+./target/debug/project --gen 127.0.0.1:9000 --listener 127.0.0.1:9001 > /dev/null 2>&1 &
 PID6=$!
 sleep 1
 echo "Finished starting 3 client request generators"

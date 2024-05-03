@@ -1,6 +1,6 @@
 use async_channel::{unbounded, Receiver, Sender};
-use petgraph::graph::DiGraph;
 use petgraph::algo::kosaraju_scc;
+use petgraph::graph::DiGraph;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use smol::io::{self, AsyncBufReadExt, AsyncWriteExt};
@@ -14,14 +14,12 @@ use std::io::Write;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 
-
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq)]
-struct CommittedDeps {
+pub struct CommittedDeps {
     #[serde_as(as = "Vec<(_, _)>")]
     pub committed: HashMap<Instance, bool>,
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ClientRequest {
@@ -71,8 +69,20 @@ pub enum Event {
     // EPaxos messages: --------------------------------------------------------
     ReceivedRequest(ClientRequest),
     // message(gamma, seq, deps, instance, sender)
-    PreAccept(ClientRequest, u64, HashMap<Instance, bool>, Instance, SocketAddr),
-    PreAcceptOK(ClientRequest, u64, HashMap<Instance, bool>, Instance, SocketAddr),
+    PreAccept(
+        ClientRequest,
+        u64,
+        HashMap<Instance, bool>,
+        Instance,
+        SocketAddr,
+    ),
+    PreAcceptOK(
+        ClientRequest,
+        u64,
+        HashMap<Instance, bool>,
+        Instance,
+        SocketAddr,
+    ),
     Accept(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
     AcceptOK(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
     Commit(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
@@ -120,7 +130,10 @@ impl Replica {
             return ans;
         }
 
-        let max_num = rs.cmds.keys().map(|x| -> u64 { x.1 }).max().unwrap();
+        let max_num = match rs.cmds.keys().map(|x| -> u64 { x.1 }).max() {
+            Some(x) => x,
+            None => 0,
+        };
 
         let mut log =
             vec![
@@ -244,7 +257,8 @@ impl Replica {
         let mut rs = replica_state.lock().unwrap();
 
         let sccs = kosaraju_scc(&rs.dep_graph);
-        for mut sc in sccs { // this is in reverse topological order 
+        for mut sc in sccs {
+            // this is in reverse topological order
             // sort each connected comp by seq number
             sc.sort_by(|a, b| {
                 let a_node = rs.dep_graph.node_weight(*a).unwrap();
@@ -260,17 +274,13 @@ impl Replica {
                 // execute if not already executed
                 if !rs.executed.contains(&ins) {
                     let (mes, addr) = match req.clone() {
-                        ClientRequest::Read(key, addr) => {
-                            (rs.dict.get(&key).cloned(), addr)
-                        }
-                        ClientRequest::Write(key, val, addr) => {
-                            (rs.dict.insert(key, val), addr)
-                        }
+                        ClientRequest::Read(key, addr) => (rs.dict.get(&key).cloned(), addr),
+                        ClientRequest::Write(key, val, addr) => (rs.dict.insert(key, val), addr),
                     };
                     smol::spawn(Replica::reply_to_client(mes, addr)).detach();
                     // mark executed
                     rs.executed.insert(ins);
-                } 
+                }
             }
         }
 
@@ -302,15 +312,26 @@ impl Replica {
             }
         }
 
-        let deps_keys : HashSet<Instance> = deps.keys().cloned().collect();
+        let deps_keys: HashSet<Instance> = deps.keys().cloned().collect();
         match cins {
             Some(cins) => {
                 // replica_id is not command leader
                 rs.cmds.insert(
                     cins,
-                    (req.clone(), seq, deps_keys.clone(), CommandState::PreAccepted),
+                    (
+                        req.clone(),
+                        seq,
+                        deps_keys.clone(),
+                        CommandState::PreAccepted,
+                    ),
                 );
                 // add dependencies to dep_graph
+                match rs.dep_graph.node_indices().find(|&n| rs.dep_graph[n] == cins) {
+                    Some(_) => (),
+                    None => {
+                        rs.dep_graph.add_node(cins);
+                    }
+                };
                 for d in deps_keys.clone() {
                     Replica::add_dependency(&mut rs.dep_graph, cins, d);
                 }
@@ -329,9 +350,20 @@ impl Replica {
                 let ins = rs.instance_number;
                 rs.cmds.insert(
                     (replica_id, ins),
-                    (req.clone(), seq, deps_keys.clone(), CommandState::PreAccepted),
+                    (
+                        req.clone(),
+                        seq,
+                        deps_keys.clone(),
+                        CommandState::PreAccepted,
+                    ),
                 );
                 // add dependencies to dep_graph
+                match rs.dep_graph.node_indices().find(|&n| rs.dep_graph[n] == (replica_id, ins)) {
+                    Some(_) => (),
+                    None => {
+                        rs.dep_graph.add_node((replica_id, ins));
+                    }
+                };
                 for d in deps_keys.clone() {
                     Replica::add_dependency(&mut rs.dep_graph, (replica_id, ins), d);
                 }
@@ -349,11 +381,11 @@ impl Replica {
 
     pub fn path(
         n: u8,
-        replica_state: Arc<Mutex<ReplicaState>>, 
+        replica_state: Arc<Mutex<ReplicaState>>,
         req: ClientRequest,
         cseq: SeqNumber,
         cdeps: HashMap<Instance, bool>,
-        cins: Instance
+        cins: Instance,
     ) -> Option<(SeqNumber, HashSet<Instance>, bool)> {
         let mut rs = replica_state.lock().unwrap();
         let preaccept_replies = rs.preaccept_replies.get(&cins).cloned();
@@ -370,27 +402,38 @@ impl Replica {
                             if cmd.3 == CommandState::PreAccepted {
                                 if n == 3 {
                                     // always take fast path and commit
-                                    let cdeps_keys: HashSet<Instance> = cdeps.keys().cloned().collect(); 
+                                    let cdeps_keys: HashSet<Instance> =
+                                        cdeps.keys().cloned().collect();
                                     rs.cmds.insert(
                                         cins,
-                                        (req.clone(), cseq, cdeps_keys.clone(), CommandState::Committed),
+                                        (
+                                            req.clone(),
+                                            cseq,
+                                            cdeps_keys.clone(),
+                                            CommandState::Committed,
+                                        ),
                                     );
-            
+
                                     // add dependencies to dep_graph
+                                    match rs.dep_graph.node_indices().find(|&n| rs.dep_graph[n] == cins) {
+                                        Some(_) => (),
+                                        None => {
+                                            rs.dep_graph.add_node(cins);
+                                        }
+                                    };
                                     for d in cdeps_keys.clone() {
                                         Replica::add_dependency(&mut rs.dep_graph, cins, d);
                                     }
-            
+
                                     drop(rs);
-            
+
                                     return Some((cseq, cdeps_keys, true));
-            
                                 } else {
                                     // n = 5
                                     // to take fast path when n = 5, every dependence must have some replica in the
                                     // quorum that has committed or executed it
 
-                                    // take max of seq and union of deps 
+                                    // take max of seq and union of deps
                                     let mut same = true;
                                     let mut union = preaccept_replies[0].clone();
                                     for reply in &preaccept_replies[1..] {
@@ -424,7 +467,7 @@ impl Replica {
                                     }
 
                                     if same {
-                                        // check whether leader has committed any dependencies that the other 
+                                        // check whether leader has committed any dependencies that the other
                                         // quorum replicas have not
                                         for (k, v) in union.1.clone().into_iter() {
                                             if !v {
@@ -434,14 +477,22 @@ impl Replica {
                                                             // no one has committed this dependence
                                                             // so must take slow path
                                                             drop(rs);
-                                                            return Some((union.0, union.1.keys().cloned().collect(), false));
+                                                            return Some((
+                                                                union.0,
+                                                                union.1.keys().cloned().collect(),
+                                                                false,
+                                                            ));
                                                         }
                                                     }
                                                     None => {
                                                         // no one has committed this dependence
                                                         // so must take slow path
                                                         drop(rs);
-                                                        return Some((union.0, union.1.keys().cloned().collect(), false));
+                                                        return Some((
+                                                            union.0,
+                                                            union.1.keys().cloned().collect(),
+                                                            false,
+                                                        ));
                                                     }
                                                 }
                                             }
@@ -449,23 +500,38 @@ impl Replica {
 
                                         // all seq and deps are the same, and every dep has some replica that has
                                         // committed it; take fast path
-                                        let union_keys: HashSet<Instance> = union.1.keys().cloned().collect(); 
+                                        let union_keys: HashSet<Instance> =
+                                            union.1.keys().cloned().collect();
                                         rs.cmds.insert(
                                             cins,
-                                            (req.clone(), union.0, union_keys.clone(), CommandState::Committed),
+                                            (
+                                                req.clone(),
+                                                union.0,
+                                                union_keys.clone(),
+                                                CommandState::Committed,
+                                            ),
                                         );
-                
+
                                         // add dependencies to dep_graph
-                                        for d in union_keys.clone() {
+                                        match rs.dep_graph.node_indices().find(|&n| rs.dep_graph[n] == cins) {
+                                            Some(_) => (),
+                                            None => {
+                                                rs.dep_graph.add_node(cins);
+                                            }
+                                        };                                        for d in union_keys.clone() {
                                             Replica::add_dependency(&mut rs.dep_graph, cins, d);
                                         }
-                
+
                                         drop(rs);
                                         return Some((union.0, union_keys, true));
                                     } else {
                                         drop(rs);
-                                        return Some((union.0, union.1.keys().cloned().collect(),false));
-                                    }                 
+                                        return Some((
+                                            union.0,
+                                            union.1.keys().cloned().collect(),
+                                            false,
+                                        ));
+                                    }
                                 }
                             } else {
                                 drop(rs);
@@ -508,6 +574,12 @@ impl Replica {
             (req.clone(), cseq, cdeps.clone(), CommandState::Committed),
         );
         // add dependencies to dep_graph
+        match rs.dep_graph.node_indices().find(|&n| rs.dep_graph[n] == cins) {
+            Some(_) => (),
+            None => {
+                rs.dep_graph.add_node(cins);
+            }
+        };
         for d in cdeps {
             Replica::add_dependency(&mut rs.dep_graph, cins, d);
         }
@@ -567,7 +639,9 @@ impl Replica {
 
                     // Send PreAccept to all:
                     for (_, stream) in streams.iter_mut() {
-                        let deps:CommittedDeps = CommittedDeps { committed: deps.clone() };
+                        let deps: CommittedDeps = CommittedDeps {
+                            committed: deps.clone(),
+                        };
                         let message =
                             Event::PreAcceptTest(req.clone(), seq, deps.clone(), ins, replica_addr);
 
@@ -590,7 +664,9 @@ impl Replica {
                     );
 
                     let stream = streams.get_mut(&leader).unwrap();
-                    let deps:CommittedDeps = CommittedDeps { committed: deps.clone() };
+                    let deps: CommittedDeps = CommittedDeps {
+                        committed: deps.clone(),
+                    };
                     let message =
                         Event::PreAcceptOKTest(req.clone(), seq, deps.clone(), cins, replica_addr);
 
@@ -602,25 +678,46 @@ impl Replica {
                     println!("Replied {:?} to {}", message, stream.get_ref().peer_addr()?);
                 }
                 Event::PreAcceptOKTest(req, cseq, cdeps, cins, _) => {
-                    let path = Replica::path(n, replica_state.clone(), req.clone(), cseq, cdeps.committed, cins);
+                    let path = Replica::path(
+                        n,
+                        replica_state.clone(),
+                        req.clone(),
+                        cseq,
+                        cdeps.committed,
+                        cins,
+                    );
 
                     match path {
                         // either take fast or slow
                         Some((seq, deps, take_fast)) => {
                             if take_fast {
-                                // Replica::execute_command(replica_state.clone());
+                                Replica::execute_command(replica_state.clone());
 
                                 // notify other replicas about the commit
                                 for (_, stream) in streams.iter_mut() {
-                                    let message =
-                                        Event::Commit(req.clone(), seq, deps.clone(), cins, replica_addr);
+                                    let message = Event::Commit(
+                                        req.clone(),
+                                        seq,
+                                        deps.clone(),
+                                        cins,
+                                        replica_addr,
+                                    );
 
                                     let _ = stream
-                                        .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())
+                                        .write_all(
+                                            serde_json::to_string(&message)
+                                                .ok()
+                                                .unwrap()
+                                                .as_bytes(),
+                                        )
                                         .await;
                                     let _ = stream.write_all("\n".as_bytes()).await;
 
-                                    println!("Sent {:?} to {}", message, stream.get_ref().peer_addr()?);
+                                    println!(
+                                        "Sent {:?} to {}",
+                                        message,
+                                        stream.get_ref().peer_addr()?
+                                    );
                                 }
                             } else {
                                 // take slow
@@ -628,12 +725,12 @@ impl Replica {
                             }
                         }
                         // either not enough, late, or some error occurred (check log for error)
-                        None => ()
+                        None => (),
                     }
                 }
                 Event::Commit(req, cseq, cdeps, cins, _) => {
                     Replica::atomic_commit(n, replica_state.clone(), req, cseq, cdeps, cins);
-                    // Replica::execute_command(replica_state.clone());
+                    Replica::execute_command(replica_state.clone());
                 }
                 _ => (),
             };
