@@ -13,6 +13,7 @@ use std::fs::File;
 use std::io::Write;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq)]
@@ -23,8 +24,15 @@ pub struct CommittedDeps {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ClientRequest {
-    Read(String, SocketAddr),
-    Write(String, String, SocketAddr),
+    // last one is request ID
+    Read(String, SocketAddr, u64),
+    Write(String, String, SocketAddr, u64),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ClientReply {
+    // Reply(result, ID)
+    Reply(Option<String>, u64)
 }
 
 pub type Instance = (u8, u64); // ID of replica, instance number
@@ -137,33 +145,33 @@ impl Replica {
 
         let mut log =
             vec![
-                vec!["Empty[----- ...................... -----]".to_string(); max_num as usize];
+                vec!["Empty[----- .................... -----]".to_string(); max_num as usize];
                 n.into()
             ];
         for ((id, num), (req, seq, _, status)) in rs.cmds.clone().into_iter() {
             match req {
-                ClientRequest::Read(key, _) => {
+                ClientRequest::Read(key, _, _) => {
                     log[(id - 1) as usize][(num - 1) as usize] = format!(
                         "{}{}{}, {}{:<3}{}{}",
-                        ">>Read-[".to_string(),
+                        "Read-[".to_string(),
                         key_to_string(key),
-                        "]".to_string(),
                         "Seq: ".to_string(),
                         seq,
                         " Status: ".to_string(),
                         status,
+                        "]".to_string(),
                     );
                 }
-                ClientRequest::Write(key, _, _) => {
+                ClientRequest::Write(key, _, _, _) => {
                     log[(id - 1) as usize][(num - 1) as usize] = format!(
                         "{}{}{}, {}{:<3}{}{}",
-                        ">>Write[".to_string(),
+                        "Write[".to_string(),
                         key_to_string(key),
-                        "]".to_string(),
                         "Seq: ".to_string(),
                         seq,
                         " Status: ".to_string(),
                         status,
+                        "]".to_string(),
                     );
                 }
             }
@@ -198,19 +206,19 @@ impl Replica {
     // returns true if requests interfere, otherwise false
     pub fn interfere(a: ClientRequest, b: ClientRequest) -> bool {
         match (a, b) {
-            (ClientRequest::Write(k1, _, _), ClientRequest::Read(k2, _)) => {
+            (ClientRequest::Write(k1, _, _, _), ClientRequest::Read(k2, _, _)) => {
                 if k1 == k2 {
                     return true;
                 }
                 return false;
             }
-            (ClientRequest::Read(k1, _), ClientRequest::Write(k2, _, _)) => {
+            (ClientRequest::Read(k1, _, _), ClientRequest::Write(k2, _, _, _)) => {
                 if k1 == k2 {
                     return true;
                 }
                 return false;
             }
-            (ClientRequest::Write(k1, _, _), ClientRequest::Write(k2, _, _)) => {
+            (ClientRequest::Write(k1, _, _, _), ClientRequest::Write(k2, _, _, _)) => {
                 if k1 == k2 {
                     return true;
                 }
@@ -235,20 +243,18 @@ impl Replica {
         dep_g.update_edge(snode, dnode, ());
     }
 
-    pub async fn reply_to_client(message: Option<String>, addr: SocketAddr) -> io::Result<()> {
-        loop {
-            match Async::<TcpStream>::connect(addr).await {
-                Ok(mut stream) => {
-                    // Intro messages.
-                    println!("Replying to client: {}", stream.get_ref().peer_addr()?);
-                    let _ = stream
-                        .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())
-                        .await;
-                    let _ = stream.write_all("\n".as_bytes()).await;
-                }
-                Err(_) => {
-                    println!("Connection to client address {} failed", addr);
-                }
+    pub async fn reply_to_client(message: ClientReply, addr: SocketAddr) -> () {
+        match Async::<TcpStream>::connect(addr).await {
+            Ok(mut stream) => {
+                // Intro messages.
+                println!("Replying to client: {}", stream.get_ref().peer_addr().ok().unwrap());
+                let _ = stream
+                    .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())
+                    .await;
+                let _ = stream.write_all("\n".as_bytes()).await;
+            }
+            Err(_) => {
+                println!("Connection to client address {} failed", addr);
             }
         }
     }
@@ -273,10 +279,11 @@ impl Replica {
                 let (req, _, _, _) = rs.cmds.get(&ins).unwrap();
                 // execute if not already executed
                 if !rs.executed.contains(&ins) {
-                    let (mes, addr) = match req.clone() {
-                        ClientRequest::Read(key, addr) => (rs.dict.get(&key).cloned(), addr),
-                        ClientRequest::Write(key, val, addr) => (rs.dict.insert(key, val), addr),
+                    let (res, addr, id) = match req.clone() {
+                        ClientRequest::Read(key, addr, id) => (rs.dict.get(&key).cloned(), addr, id),
+                        ClientRequest::Write(key, val, addr, id) => (rs.dict.insert(key, val), addr, id),
                     };
+                    let mes: ClientReply = ClientReply::Reply(res, id);
                     smol::spawn(Replica::reply_to_client(mes, addr)).detach();
                     // mark executed
                     rs.executed.insert(ins);
@@ -326,7 +333,11 @@ impl Replica {
                     ),
                 );
                 // add dependencies to dep_graph
-                match rs.dep_graph.node_indices().find(|&n| rs.dep_graph[n] == cins) {
+                match rs
+                    .dep_graph
+                    .node_indices()
+                    .find(|&n| rs.dep_graph[n] == cins)
+                {
                     Some(_) => (),
                     None => {
                         rs.dep_graph.add_node(cins);
@@ -358,7 +369,11 @@ impl Replica {
                     ),
                 );
                 // add dependencies to dep_graph
-                match rs.dep_graph.node_indices().find(|&n| rs.dep_graph[n] == (replica_id, ins)) {
+                match rs
+                    .dep_graph
+                    .node_indices()
+                    .find(|&n| rs.dep_graph[n] == (replica_id, ins))
+                {
                     Some(_) => (),
                     None => {
                         rs.dep_graph.add_node((replica_id, ins));
@@ -415,7 +430,11 @@ impl Replica {
                                     );
 
                                     // add dependencies to dep_graph
-                                    match rs.dep_graph.node_indices().find(|&n| rs.dep_graph[n] == cins) {
+                                    match rs
+                                        .dep_graph
+                                        .node_indices()
+                                        .find(|&n| rs.dep_graph[n] == cins)
+                                    {
                                         Some(_) => (),
                                         None => {
                                             rs.dep_graph.add_node(cins);
@@ -513,12 +532,17 @@ impl Replica {
                                         );
 
                                         // add dependencies to dep_graph
-                                        match rs.dep_graph.node_indices().find(|&n| rs.dep_graph[n] == cins) {
+                                        match rs
+                                            .dep_graph
+                                            .node_indices()
+                                            .find(|&n| rs.dep_graph[n] == cins)
+                                        {
                                             Some(_) => (),
                                             None => {
                                                 rs.dep_graph.add_node(cins);
                                             }
-                                        };                                        for d in union_keys.clone() {
+                                        };
+                                        for d in union_keys.clone() {
                                             Replica::add_dependency(&mut rs.dep_graph, cins, d);
                                         }
 
@@ -574,7 +598,11 @@ impl Replica {
             (req.clone(), cseq, cdeps.clone(), CommandState::Committed),
         );
         // add dependencies to dep_graph
-        match rs.dep_graph.node_indices().find(|&n| rs.dep_graph[n] == cins) {
+        match rs
+            .dep_graph
+            .node_indices()
+            .find(|&n| rs.dep_graph[n] == cins)
+        {
             Some(_) => (),
             None => {
                 rs.dep_graph.add_node(cins);

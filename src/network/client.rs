@@ -1,15 +1,18 @@
+use crate::network::replica::ClientReply;
 use crate::network::replica::{ClientRequest, Event::ReceivedRequest, Event::SaveState};
 use rand::distributions::Alphanumeric;
 use rand::Rng;
 use smol::io::{AsyncBufReadExt, AsyncWriteExt};
 use smol::stream::StreamExt;
 use smol::{future, io, Async, Unblock};
+use std::collections::HashMap;
 use std::io::{stdout, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-pub fn send_client_request(addr: SocketAddr) -> io::Result<()> {
+pub fn send_client_request(addr: SocketAddr, id: u64) -> io::Result<()> {
     smol::block_on(async {
         // Connect to the server and create async stdin and stdout.
         let stream = Async::<TcpStream>::connect(addr).await?;
@@ -19,7 +22,7 @@ pub fn send_client_request(addr: SocketAddr) -> io::Result<()> {
 
         let mut writer = &stream;
 
-        let mes = ClientRequest::Read("Hello".to_string(), addr);
+        let mes = ClientRequest::Read("Hello".to_string(), addr, id);
         let res = writer
             .write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes())
             .await;
@@ -52,6 +55,7 @@ pub fn debugging_client(addr: SocketAddr) -> io::Result<()> {
         println!("My nickname: {}", stream.get_ref().local_addr()?);
 
         let mut writer = &stream;
+        let mut id: u64 = 0; 
 
         print!("Read or write? (r/w): ");
         let _ = stdout().flush();
@@ -76,7 +80,7 @@ pub fn debugging_client(addr: SocketAddr) -> io::Result<()> {
                         }
                     } else if mode == "r" {
                         mode = "q".to_string();
-                        let mes = ReceivedRequest(ClientRequest::Read(line, addr));
+                        let mes = ReceivedRequest(ClientRequest::Read(line, addr, id));
                         let _ = writer
                             .write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes())
                             .await;
@@ -90,7 +94,7 @@ pub fn debugging_client(addr: SocketAddr) -> io::Result<()> {
                         let _ = stdout().flush();
                     } else {
                         mode = "q".to_string();
-                        let mes = ReceivedRequest(ClientRequest::Write(key.clone(), line, addr));
+                        let mes = ReceivedRequest(ClientRequest::Write(key.clone(), line, addr, id));
                         let _ = writer
                             .write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes())
                             .await;
@@ -103,6 +107,7 @@ pub fn debugging_client(addr: SocketAddr) -> io::Result<()> {
                     println!("Client input error: {}", e);
                 }
             }
+            id += 1;
         }
         Ok(())
     })
@@ -114,7 +119,8 @@ pub fn generator_client(
     conflict: f64,
     timesleep: u8,
 ) -> io::Result<()> {
-    async fn print_incoming(listener: Async<TcpListener>) -> io::Result<()> {
+
+    async fn print_incoming(listener: Async<TcpListener>, ts: Arc<Mutex<HashMap<u64, Instant>>>) -> io::Result<()> {
         loop {
             // Accept the next connection.
             let (stream, _) = listener.accept().await?;
@@ -123,7 +129,15 @@ pub fn generator_client(
 
             println!("Reply received:");
             // parse
-            let json: Option<String> = serde_json::from_str(line.as_str())?;
+            let json: ClientReply = serde_json::from_str(line.as_str())?;
+
+            let ts_access = ts.lock().unwrap();
+            match json.clone() {
+                ClientReply::Reply(x, id) => {
+                    println!("{:?}, duration: {}ms", x, ts_access.get(&id).unwrap().elapsed().as_millis())
+                }
+            }
+            drop(ts_access);
             println!("{:?}", json);
         }
     }
@@ -135,8 +149,9 @@ pub fn generator_client(
             "Listening to connections on {}",
             listener.get_ref().local_addr()?
         );
+        let time_store: Arc<Mutex<HashMap<u64, Instant>>> = Arc::new(Mutex::new(HashMap::new()));
 
-        smol::spawn(print_incoming(listener)).detach();
+        smol::spawn(print_incoming(listener, time_store.clone())).detach();
 
         // Connect to the server
         let stream = Async::<TcpStream>::connect(addr).await?;
@@ -148,6 +163,7 @@ pub fn generator_client(
 
         let fixed = "hello".to_string();
         let write_percentage = 0.05;
+        let mut id: u64 = 0;
 
         loop {
             let mut rng = rand::thread_rng();
@@ -172,20 +188,27 @@ pub fn generator_client(
                     .collect();
             }
 
+            let mut ts_access = time_store.lock().unwrap();
+
             if write_coin || conflict_coin {
-                let mes = ReceivedRequest(ClientRequest::Write(key.clone(), key, listen_addr));
+                let mes = ReceivedRequest(ClientRequest::Write(key.clone(), key, listen_addr, id));
                 let _ = writer
                     .write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes())
                     .await;
                 let _ = writer.write_all("\n".as_bytes()).await;
             } else {
-                let mes = ReceivedRequest(ClientRequest::Read(key, listen_addr));
+                let mes = ReceivedRequest(ClientRequest::Read(key, listen_addr, id));
                 let _ = writer
                     .write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes())
                     .await;
                 let _ = writer.write_all("\n".as_bytes()).await;
             }
+
+            ts_access.insert(id, Instant::now());
+            drop(ts_access);
+
             thread::sleep(Duration::from_secs(timesleep as u64));
+            id += 1;
         }
     })
 }
