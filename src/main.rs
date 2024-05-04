@@ -38,8 +38,8 @@ struct Cli {
     gen: Option<String>,
 
     /// Rate limit in seconds for request generating client
-    #[arg(short, long, default_value_t = 1)]
-    time_sleep: u8,
+    #[arg(short, long, default_value_t = 40)] // find the val [FIXME]
+    time_sleep: u64,
 
     /// Conflict rate [0,1]
     #[arg(short, long, default_value_t = 0.1)]

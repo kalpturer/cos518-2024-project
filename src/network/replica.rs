@@ -13,7 +13,6 @@ use std::fs::File;
 use std::io::Write;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
 
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq)]
@@ -264,7 +263,10 @@ impl Replica {
             // execute unexecuted commands in this order
             for node in sc {
                 let ins = rs.dep_graph.node_weight(node).unwrap().clone();
-                let (req, _, _, _) = rs.cmds.get(&ins).unwrap();
+                let req = match rs.cmds.get(&ins) {
+                    Some((r, _, _, _)) => r,
+                    None => return (),
+                };
                 // execute if not already executed
                 if !rs.executed.contains(&ins) {
                     let (res, addr, id) = match req.clone() {
@@ -751,6 +753,8 @@ impl Replica {
                 Event::AcceptOK(req, cseq, cdeps, cins, _) => {
                     let commit = Replica::atomic_accept(n, replica_state.clone(), req.clone(), cseq, cdeps.clone(), cins);
                     if commit {
+                        Replica::execute_command(replica_state.clone());
+
                         // notify other replicas about the commit
                         for (_, stream) in streams.iter_mut() {
                             let message =

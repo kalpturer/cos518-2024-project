@@ -117,7 +117,7 @@ pub fn generator_client(
     addr: SocketAddr,
     listen_addr: SocketAddr,
     conflict: f64,
-    timesleep: u8,
+    timesleep: u64,
 ) -> io::Result<()> {
 
     async fn print_incoming(listener: Async<TcpListener>, ts: Arc<Mutex<HashMap<u64, Instant>>>) -> io::Result<()> {
@@ -162,7 +162,7 @@ pub fn generator_client(
         let mut writer = &stream;
 
         let fixed = "hello".to_string();
-        let write_percentage = 0.05;
+        let write_percentage = 0.5;
         let mut id: u64 = 0;
 
         loop {
@@ -190,7 +190,7 @@ pub fn generator_client(
 
             let mut ts_access = time_store.lock().unwrap();
 
-            if write_coin || conflict_coin {
+            if write_coin {
                 let mes = ReceivedRequest(ClientRequest::Write(key.clone(), key, listen_addr, id));
                 let _ = writer
                     .write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes())
@@ -207,7 +207,7 @@ pub fn generator_client(
             ts_access.insert(id, Instant::now());
             drop(ts_access);
 
-            thread::sleep(Duration::from_secs(timesleep as u64));
+            thread::sleep(Duration::from_millis(timesleep));
             id += 1;
         }
     })

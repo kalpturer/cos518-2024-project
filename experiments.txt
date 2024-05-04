@@ -1,0 +1,18 @@
+
+write percentage:   100%
+conflict rate:      0%, 2%, 100%
+latency:            median, 99% (store all)
+throughput: number of fullfilled request per time (with minimum timesleep)
+experiment time: 30 seconds
+
+global3:   tokyo,       london,        virginia
+domestic3: california,  ohio,          virginia
+global5:   tokyo,       london,        virginia,   sydney,     sao paolo
+domestic5: canada,      california,    ohio,       virginia,   oregon
+
+latency:
+-- domestic, 3
+-- global,   3
+-- domestic, 5
+-- global,   5
+
