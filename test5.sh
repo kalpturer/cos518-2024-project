@@ -47,15 +47,15 @@ echo "Finished starting 5 replicas"
 
 echo "Starting 5 client request generators"
 # Start 3 clients, one for each replica that generate random requests
-./target/release/project --gen 127.0.0.1:8000 --experiment_time $experiment_len --listener 127.0.0.1:8001 > client1.log 2>&1 &
+./target/release/project --gen 127.0.0.1:8000 --experiment-time $experiment_len --listener 127.0.0.1:8001 > client1.log 2>&1 &
 PID6=$!
-./target/release/project --gen 127.0.0.1:9000 --experiment_time $experiment_len --listener 127.0.0.1:9001 > client2.log 2>&1 &
+./target/release/project --gen 127.0.0.1:9000 --experiment-time $experiment_len --listener 127.0.0.1:9001 > client2.log 2>&1 &
 PID7=$!
-./target/release/project --gen 127.0.0.1:10000 --experiment_time $experiment_len --listener 127.0.0.1:10001 > client3.log 2>&1 &
+./target/release/project --gen 127.0.0.1:10000 --experiment-time $experiment_len --listener 127.0.0.1:10001 > client3.log 2>&1 &
 PID8=$!
-./target/release/project --gen 127.0.0.1:11000 --experiment_time $experiment_len --listener 127.0.0.1:11001 > client4.log 2>&1 &
+./target/release/project --gen 127.0.0.1:11000 --experiment-time $experiment_len --listener 127.0.0.1:11001 > client4.log 2>&1 &
 PID9=$!
-./target/release/project --gen 127.0.0.1:12000 --experiment_time $experiment_len --listener 127.0.0.1:12001 > client5.log 2>&1 &
+./target/release/project --gen 127.0.0.1:12000 --experiment-time $experiment_len --listener 127.0.0.1:12001 > client5.log 2>&1 &
 PID10=$!
 echo "Finished starting 5 client request generators"
 
