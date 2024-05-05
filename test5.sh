@@ -1,6 +1,6 @@
 #!/bin/bash
 
-experiment_len=5
+experiment_len=30
 
 echo "Starting 5 replicas"
 
@@ -47,15 +47,15 @@ echo "Finished starting 5 replicas"
 
 echo "Starting 5 client request generators"
 # Start 3 clients, one for each replica that generate random requests
-./target/release/project --gen 127.0.0.1:5000 --experiment_time $experiment_len --listener 127.0.0.1:5001 > client1.log 2>&1 &
+./target/release/project --gen 127.0.0.1:5000 --experiment-time $experiment_len --listener 127.0.0.1:5001 > client1.log 2>&1 &
 PID6=$!
-./target/release/project --gen 127.0.0.1:6000 --experiment_time $experiment_len --listener 127.0.0.1:6001 > client2.log 2>&1 &
+./target/release/project --gen 127.0.0.1:6000 --experiment-time $experiment_len --listener 127.0.0.1:6001 > client2.log 2>&1 &
 PID7=$!
-./target/release/project --gen 127.0.0.1:7000 --experiment_time $experiment_len --listener 127.0.0.1:7001 > client3.log 2>&1 &
+./target/release/project --gen 127.0.0.1:7000 --experiment-time $experiment_len --listener 127.0.0.1:7001 > client3.log 2>&1 &
 PID8=$!
-./target/release/project --gen 127.0.0.1:8000 --experiment_time $experiment_len --listener 127.0.0.1:8001 > client4.log 2>&1 &
+./target/release/project --gen 127.0.0.1:8000 --experiment-time $experiment_len --listener 127.0.0.1:8001 > client4.log 2>&1 &
 PID9=$!
-./target/release/project --gen 127.0.0.1:9000 --experiment_time $experiment_len --listener 127.0.0.1:9001 > client5.log 2>&1 &
+./target/release/project --gen 127.0.0.1:9000 --experiment-time $experiment_len --listener 127.0.0.1:9001 > client5.log 2>&1 &
 PID10=$!
 echo "Finished starting 5 client request generators"
 
