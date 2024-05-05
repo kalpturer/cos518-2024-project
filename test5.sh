@@ -1,6 +1,6 @@
 #!/bin/bash
 
-experiment_len=5
+experiment_len=30
 
 echo "Starting 5 replicas"
 
