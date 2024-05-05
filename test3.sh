@@ -43,7 +43,7 @@ PID6=$!
 #sleep 5
 echo "Finished starting 3 client request generators"
 
-echo "Sleeping for 5 seconds"
+echo "Sleeping for _ seconds"
 # Sleep for 30 seconds
 
 sleep $experiment_len

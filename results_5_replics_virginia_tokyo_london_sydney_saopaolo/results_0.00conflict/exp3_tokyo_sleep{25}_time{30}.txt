@@ -1,0 +1,1198 @@
+Listening to connections on 172.31.9.230:6001
+Connected to 35.178.195.147:6000
+556ms
+634ms
+609ms
+684ms
+584ms
+710ms
+660ms
+536ms
+738ms
+684ms
+660ms
+509ms
+585ms
+535ms
+485ms
+637ms
+563ms
+614ms
+549ms
+574ms
+675ms
+626ms
+501ms
+526ms
+602ms
+702ms
+653ms
+645ms
+570ms
+696ms
+747ms
+621ms
+772ms
+598ms
+724ms
+676ms
+465ms
+591ms
+542ms
+517ms
+493ms
+618ms
+669ms
+646ms
+571ms
+558ms
+710ms
+585ms
+687ms
+537ms
+638ms
+663ms
+513ms
+614ms
+538ms
+488ms
+515ms
+590ms
+678ms
+577ms
+477ms
+654ms
+629ms
+584ms
+560ms
+535ms
+636ms
+511ms
+662ms
+613ms
+464ms
+492ms
+472ms
+574ms
+500ms
+676ms
+627ms
+527ms
+552ms
+653ms
+605ms
+642ms
+592ms
+517ms
+669ms
+543ms
+568ms
+619ms
+495ms
+470ms
+565ms
+540ms
+465ms
+641ms
+491ms
+667ms
+617ms
+517ms
+597ms
+482ms
+658ms
+583ms
+634ms
+509ms
+559ms
+611ms
+554ms
+537ms
+487ms
+563ms
+588ms
+689ms
+614ms
+515ms
+641ms
+666ms
+533ms
+559ms
+515ms
+490ms
+692ms
+617ms
+667ms
+642ms
+592ms
+616ms
+566ms
+642ms
+592ms
+492ms
+542ms
+668ms
+541ms
+717ms
+639ms
+564ms
+589ms
+540ms
+509ms
+710ms
+535ms
+636ms
+687ms
+467ms
+517ms
+670ms
+620ms
+494ms
+570ms
+547ms
+659ms
+610ms
+688ms
+513ms
+563ms
+664ms
+614ms
+640ms
+540ms
+590ms
+490ms
+482ms
+632ms
+507ms
+558ms
+659ms
+609ms
+584ms
+685ms
+535ms
+712ms
+612ms
+563ms
+664ms
+589ms
+640ms
+690ms
+540ms
+517ms
+516ms
+692ms
+717ms
+541ms
+616ms
+768ms
+593ms
+693ms
+668ms
+618ms
+662ms
+562ms
+488ms
+513ms
+538ms
+614ms
+690ms
+590ms
+642ms
+619ms
+720ms
+670ms
+595ms
+645ms
+745ms
+571ms
+772ms
+698ms
+632ms
+708ms
+558ms
+734ms
+658ms
+533ms
+785ms
+585ms
+761ms
+685ms
+610ms
+538ms
+665ms
+615ms
+590ms
+641ms
+567ms
+718ms
+517ms
+693ms
+562ms
+638ms
+689ms
+589ms
+539ms
+514ms
+665ms
+715ms
+615ms
+777ms
+627ms
+803ms
+653ms
+578ms
+604ms
+554ms
+705ms
+680ms
+730ms
+756ms
+531ms
+630ms
+706ms
+531ms
+656ms
+757ms
+581ms
+732ms
+607ms
+557ms
+684ms
+545ms
+746ms
+596ms
+521ms
+572ms
+673ms
+698ms
+723ms
+623ms
+648ms
+682ms
+833ms
+758ms
+908ms
+883ms
+708ms
+633ms
+784ms
+608ms
+934ms
+859ms
+734ms
+810ms
+659ms
+584ms
+542ms
+643ms
+721ms
+621ms
+746ms
+697ms
+672ms
+599ms
+574ms
+720ms
+645ms
+545ms
+570ms
+520ms
+671ms
+696ms
+621ms
+597ms
+748ms
+666ms
+767ms
+742ms
+642ms
+542ms
+693ms
+617ms
+718ms
+568ms
+594ms
+717ms
+592ms
+617ms
+869ms
+668ms
+643ms
+769ms
+543ms
+493ms
+819ms
+895ms
+569ms
+519ms
+695ms
+846ms
+746ms
+797ms
+680ms
+731ms
+756ms
+806ms
+656ms
+631ms
+782ms
+832ms
+709ms
+591ms
+692ms
+617ms
+768ms
+643ms
+718ms
+794ms
+668ms
+820ms
+745ms
+781ms
+705ms
+630ms
+606ms
+582ms
+757ms
+808ms
+682ms
+833ms
+733ms
+660ms
+757ms
+807ms
+657ms
+607ms
+783ms
+708ms
+683ms
+733ms
+634ms
+508ms
+759ms
+534ms
+766ms
+641ms
+616ms
+718ms
+668ms
+693ms
+593ms
+744ms
+721ms
+522ms
+673ms
+623ms
+598ms
+649ms
+749ms
+699ms
+549ms
+574ms
+797ms
+647ms
+773ms
+748ms
+572ms
+673ms
+623ms
+598ms
+699ms
+724ms
+656ms
+706ms
+857ms
+731ms
+832ms
+907ms
+807ms
+633ms
+784ms
+759ms
+584ms
+665ms
+743ms
+617ms
+944ms
+995ms
+883ms
+833ms
+858ms
+733ms
+683ms
+784ms
+709ms
+810ms
+660ms
+761ms
+935ms
+1061ms
+886ms
+1087ms
+911ms
+1012ms
+987ms
+963ms
+1114ms
+1038ms
+710ms
+911ms
+936ms
+786ms
+1012ms
+762ms
+862ms
+737ms
+812ms
+687ms
+888ms
+1089ms
+964ms
+990ms
+839ms
+1040ms
+1065ms
+862ms
+687ms
+737ms
+888ms
+812ms
+712ms
+764ms
+839ms
+789ms
+1331ms
+1131ms
+1307ms
+1031ms
+1257ms
+1107ms
+1283ms
+1233ms
+1057ms
+1082ms
+1158ms
+1359ms
+1184ms
+1210ms
+1189ms
+1164ms
+1064ms
+1089ms
+1240ms
+1014ms
+1215ms
+1115ms
+939ms
+990ms
+1041ms
+966ms
+1143ms
+1141ms
+1066ms
+1116ms
+1217ms
+1167ms
+1042ms
+1017ms
+1093ms
+1194ms
+1419ms
+1470ms
+1320ms
+1345ms
+1120ms
+1496ms
+1371ms
+1607ms
+1582ms
+1456ms
+1557ms
+1482ms
+1508ms
+1759ms
+1408ms
+1534ms
+1384ms
+1710ms
+1158ms
+1284ms
+1208ms
+1259ms
+1309ms
+1133ms
+1359ms
+1234ms
+1184ms
+1353ms
+1362ms
+1488ms
+1414ms
+1389ms
+1314ms
+1515ms
+1264ms
+1465ms
+1540ms
+1340ms
+1291ms
+1442ms
+1671ms
+1596ms
+1722ms
+1697ms
+1572ms
+1623ms
+1748ms
+1522ms
+1548ms
+1499ms
+1649ms
+2028ms
+1928ms
+2154ms
+2179ms
+2054ms
+2129ms
+2205ms
+1829ms
+1954ms
+1854ms
+1979ms
+1879ms
+2231ms
+1905ms
+2081ms
+2006ms
+2106ms
+1618ms
+2095ms
+1719ms
+2020ms
+1469ms
+1795ms
+1996ms
+1545ms
+1419ms
+1846ms
+1570ms
+1645ms
+1520ms
+1771ms
+2172ms
+2198ms
+1972ms
+1445ms
+1897ms
+2223ms
+2073ms
+1872ms
+1923ms
+1948ms
+1497ms
+2049ms
+1597ms
+2275ms
+1823ms
+1673ms
+1748ms
+2149ms
+1698ms
+2250ms
+2125ms
+2646ms
+2396ms
+2697ms
+2446ms
+2798ms
+2772ms
+2723ms
+2623ms
+2547ms
+2498ms
+2423ms
+2675ms
+2600ms
+2525ms
+2475ms
+2751ms
+2575ms
+2917ms
+2767ms
+2592ms
+2843ms
+1915ms
+3019ms
+3044ms
+3094ms
+3120ms
+2317ms
+2016ms
+3145ms
+2869ms
+2995ms
+2945ms
+2819ms
+3070ms
+2970ms
+2418ms
+2794ms
+2494ms
+1942ms
+2268ms
+2695ms
+2745ms
+2670ms
+2193ms
+2294ms
+3172ms
+2896ms
+2168ms
+2394ms
+2570ms
+2093ms
+2144ms
+2721ms
+2470ms
+2219ms
+2044ms
+2345ms
+2646ms
+2119ms
+2245ms
+2452ms
+2553ms
+2628ms
+2528ms
+2001ms
+2076ms
+2378ms
+1976ms
+3934ms
+4009ms
+3959ms
+4311ms
+4411ms
+3759ms
+4086ms
+3910ms
+3735ms
+4061ms
+3860ms
+4337ms
+4362ms
+4262ms
+4162ms
+4137ms
+4188ms
+4213ms
+3837ms
+3786ms
+4464ms
+3887ms
+3988ms
+4390ms
+4239ms
+4490ms
+3813ms
+4039ms
+4440ms
+4114ms
+4290ms
+4488ms
+4564ms
+4513ms
+4689ms
+5216ms
+5041ms
+5108ms
+5208ms
+4907ms
+5158ms
+4882ms
+4782ms
+4807ms
+5008ms
+4632ms
+5083ms
+5033ms
+4657ms
+4933ms
+5134ms
+4983ms
+4607ms
+4732ms
+4757ms
+4557ms
+4682ms
+4858ms
+4958ms
+4833ms
+5184ms
+5926ms
+5751ms
+6178ms
+6504ms
+6454ms
+6103ms
+5902ms
+6229ms
+6078ms
+6254ms
+5828ms
+6330ms
+6029ms
+5954ms
+6280ms
+5853ms
+6054ms
+6405ms
+6205ms
+6004ms
+6481ms
+5804ms
+5779ms
+4801ms
+4575ms
+5303ms
+4600ms
+4826ms
+5027ms
+4199ms
+4174ms
+3999ms
+4551ms
+4099ms
+5629ms
+4300ms
+5454ms
+4350ms
+5404ms
+4727ms
+4077ms
+4880ms
+5582ms
+5231ms
+4629ms
+4654ms
+4504ms
+5006ms
+5332ms
+4328ms
+6385ms
+5482ms
+4063ms
+4389ms
+4138ms
+4239ms
+6371ms
+5995ms
+6447ms
+5067ms
+5167ms
+6171ms
+5268ms
+4867ms
+5444ms
+4917ms
+5695ms
+4466ms
+5670ms
+5143ms
+4943ms
+5720ms
+5294ms
+5896ms
+4692ms
+5119ms
+5621ms
+5219ms
+6323ms
+4166ms
+4994ms
+5370ms
+4492ms
+4543ms
+5195ms
+4292ms
+5571ms
+6149ms
+4042ms
+5095ms
+5547ms
+4443ms
+5522ms
+5748ms
+4795ms
+4724ms
+4975ms
+5401ms
+4273ms
+4718ms
+5069ms
+6604ms
+6755ms
+7031ms
+6003ms
+6630ms
+7006ms
+6104ms
+6681ms
+6455ms
+7133ms
+6405ms
+6130ms
+6531ms
+6255ms
+6807ms
+6306ms
+5980ms
+6557ms
+6908ms
+6707ms
+6231ms
+6582ms
+6055ms
+6958ms
+7209ms
+7234ms
+6783ms
+6858ms
+7109ms
+6332ms
+6382ms
+6508ms
+6156ms
+6884ms
+6483ms
+6357ms
+6734ms
+6433ms
+6207ms
+6935ms
+6985ms
+7185ms
+6659ms
+7085ms
+6083ms
+7161ms
+7061ms
+6284ms
+6183ms
+6043ms
+6845ms
+9543ms
+8816ms
+9243ms
+8666ms
+8766ms
+9068ms
+9469ms
+8265ms
+9871ms
+8742ms
+8140ms
+10022ms
+8090ms
+9395ms
+8191ms
+8693ms
+8392ms
+9445ms
+8592ms
+9195ms
+8342ms
+8292ms
+8317ms
+9571ms
+8994ms
+7941ms
+9295ms
+9045ms
+9907ms
+7925ms
+8176ms
+9832ms
+9330ms
+7976ms
+9857ms
+9029ms
+9782ms
+8879ms
+8452ms
+8929ms
+8051ms
+8076ms
+9607ms
+8503ms
+9356ms
+9105ms
+9707ms
+8980ms
+9808ms
+9983ms
+9733ms
+8629ms
+9657ms
+8529ms
+9959ms
+8228ms
+9231ms
+9131ms
+8027ms
+8128ms
+8554ms
+8730ms
+8253ms
+10010ms
+9182ms
+8580ms
+9157ms
+9383ms
+8906ms
+9508ms
+8656ms
+8004ms
+9760ms
+9634ms
+8481ms
+8380ms
+9685ms
+9535ms
+8958ms
+8807ms
+9435ms
+10062ms
+9936ms
+9284ms
+8858ms
+8432ms
+Req_ID: 986 not received, duration: 10268ms
+Req_ID: 1010 not received, duration: 9666ms
+Req_ID: 981 not received, duration: 10393ms
+Req_ID: 1055 not received, duration: 8537ms
+Req_ID: 1061 not received, duration: 8386ms
+Req_ID: 1015 not received, duration: 9540ms
+Req_ID: 1142 not received, duration: 6354ms
+Req_ID: 1155 not received, duration: 6028ms
+Req_ID: 1043 not received, duration: 8838ms
+Req_ID: 1183 not received, duration: 5326ms
+Req_ID: 1057 not received, duration: 8487ms
+Req_ID: 1073 not received, duration: 8085ms
+Req_ID: 1052 not received, duration: 8612ms
+Req_ID: 1124 not received, duration: 6806ms
+Req_ID: 1133 not received, duration: 6580ms
+Req_ID: 1146 not received, duration: 6254ms
+Req_ID: 1150 not received, duration: 6154ms
+Req_ID: 1148 not received, duration: 6204ms
+Req_ID: 1086 not received, duration: 7759ms
+Req_ID: 1156 not received, duration: 6003ms
+Req_ID: 1160 not received, duration: 5903ms
+Req_ID: 1171 not received, duration: 5627ms
+Req_ID: 999 not received, duration: 9942ms
+Req_ID: 1039 not received, duration: 8938ms
+Req_ID: 1077 not received, duration: 7985ms
+Req_ID: 992 not received, duration: 10117ms
+Req_ID: 1144 not received, duration: 6304ms
+Req_ID: 1181 not received, duration: 5376ms
+Req_ID: 1182 not received, duration: 5351ms
+Req_ID: 1187 not received, duration: 5226ms
+Req_ID: 1025 not received, duration: 9289ms
+Req_ID: 1069 not received, duration: 8186ms
+Req_ID: 1137 not received, duration: 6480ms
+Req_ID: 1129 not received, duration: 6680ms
+Req_ID: 1099 not received, duration: 7433ms
+Req_ID: 1054 not received, duration: 8562ms
+Req_ID: 1175 not received, duration: 5527ms
+Req_ID: 1119 not received, duration: 6931ms
+Req_ID: 1141 not received, duration: 6379ms
+Req_ID: 1050 not received, duration: 8662ms
+Req_ID: 1074 not received, duration: 8060ms
+Req_ID: 1128 not received, duration: 6706ms
+Req_ID: 1195 not received, duration: 5025ms
+Req_ID: 1012 not received, duration: 9616ms
+Req_ID: 971 not received, duration: 10644ms
+Req_ID: 1120 not received, duration: 6906ms
+Req_ID: 1161 not received, duration: 5878ms
+Req_ID: 969 not received, duration: 10694ms
+Req_ID: 1174 not received, duration: 5552ms
+Req_ID: 1030 not received, duration: 9164ms
+Req_ID: 1134 not received, duration: 6555ms
+Req_ID: 1192 not received, duration: 5100ms
+Req_ID: 1085 not received, duration: 7784ms
+Req_ID: 1008 not received, duration: 9716ms
+Req_ID: 1167 not received, duration: 5727ms
+Req_ID: 1100 not received, duration: 7408ms
+Req_ID: 1040 not received, duration: 8913ms
+Req_ID: 1136 not received, duration: 6505ms
+Req_ID: 1024 not received, duration: 9315ms
+Req_ID: 993 not received, duration: 10092ms
+Req_ID: 1191 not received, duration: 5125ms
+Req_ID: 1122 not received, duration: 6856ms
+Req_ID: 1035 not received, duration: 9039ms
+Req_ID: 1143 not received, duration: 6329ms
+Req_ID: 1158 not received, duration: 5953ms
+Req_ID: 1177 not received, duration: 5476ms
+Req_ID: 988 not received, duration: 10218ms
+Req_ID: 1017 not received, duration: 9490ms
+Req_ID: 1109 not received, duration: 7182ms
+Req_ID: 994 not received, duration: 10067ms
+Req_ID: 1016 not received, duration: 9515ms
+Req_ID: 1139 not received, duration: 6430ms
+Req_ID: 1019 not received, duration: 9440ms
+Req_ID: 1169 not received, duration: 5677ms
+Req_ID: 1003 not received, duration: 9841ms
+Req_ID: 1014 not received, duration: 9565ms
+Req_ID: 1164 not received, duration: 5803ms
+Req_ID: 991 not received, duration: 10142ms
+Req_ID: 1145 not received, duration: 6279ms
+Req_ID: 1159 not received, duration: 5928ms
+Req_ID: 1180 not received, duration: 5401ms
+Req_ID: 1140 not received, duration: 6405ms
+Req_ID: 1121 not received, duration: 6881ms
+Req_ID: 1089 not received, duration: 7684ms
+Req_ID: 1045 not received, duration: 8788ms
+Req_ID: 1022 not received, duration: 9365ms
+Req_ID: 1092 not received, duration: 7609ms
+Req_ID: 1110 not received, duration: 7157ms
+Req_ID: 1006 not received, duration: 9766ms
+Req_ID: 1051 not received, duration: 8637ms
+Req_ID: 1058 not received, duration: 8462ms
+Req_ID: 1132 not received, duration: 6605ms
+Req_ID: 1105 not received, duration: 7283ms
+Req_ID: 1048 not received, duration: 8713ms
+Req_ID: 1068 not received, duration: 8211ms
+Req_ID: 1102 not received, duration: 7358ms
+Req_ID: 1072 not received, duration: 8110ms
+Req_ID: 989 not received, duration: 10193ms
+Req_ID: 1011 not received, duration: 9641ms
+Req_ID: 1029 not received, duration: 9189ms
+Req_ID: 1036 not received, duration: 9014ms
+Req_ID: 1063 not received, duration: 8336ms
+Req_ID: 1117 not received, duration: 6982ms
+Req_ID: 1172 not received, duration: 5602ms
+Req_ID: 1028 not received, duration: 9214ms
+Req_ID: 1021 not received, duration: 9390ms
+Req_ID: 1090 not received, duration: 7659ms
+Req_ID: 1114 not received, duration: 7057ms
+Req_ID: 1173 not received, duration: 5577ms
+Req_ID: 1151 not received, duration: 6129ms
+Req_ID: 1033 not received, duration: 9089ms
+Req_ID: 1186 not received, duration: 5251ms
+Req_ID: 1031 not received, duration: 9139ms
+Req_ID: 1062 not received, duration: 8361ms
+Req_ID: 1116 not received, duration: 7007ms
+Req_ID: 967 not received, duration: 10745ms
+Req_ID: 1041 not received, duration: 8888ms
+Req_ID: 1130 not received, duration: 6655ms
+Req_ID: 1118 not received, duration: 6957ms
+Req_ID: 1166 not received, duration: 5752ms
+Req_ID: 972 not received, duration: 10619ms
+Req_ID: 1135 not received, duration: 6530ms
+Req_ID: 1111 not received, duration: 7132ms
+Req_ID: 1093 not received, duration: 7584ms
+Req_ID: 1190 not received, duration: 5150ms
+Req_ID: 1184 not received, duration: 5301ms
+Req_ID: 1032 not received, duration: 9114ms
+Req_ID: 1163 not received, duration: 5828ms
+Req_ID: 1091 not received, duration: 7634ms
+Req_ID: 1152 not received, duration: 6104ms
+Req_ID: 1127 not received, duration: 6731ms
+Req_ID: 1049 not received, duration: 8688ms
+Req_ID: 1083 not received, duration: 7835ms
+Req_ID: 1059 not received, duration: 8437ms
+Req_ID: 1081 not received, duration: 7885ms
+Req_ID: 1034 not received, duration: 9064ms
+Req_ID: 1082 not received, duration: 7860ms
+Req_ID: 998 not received, duration: 9967ms
+Req_ID: 1101 not received, duration: 7383ms
+Req_ID: 1179 not received, duration: 5426ms
+Req_ID: 1096 not received, duration: 7508ms
+Req_ID: 1147 not received, duration: 6229ms
+Req_ID: 1046 not received, duration: 8763ms
+Req_ID: 1071 not received, duration: 8136ms
+Req_ID: 985 not received, duration: 10293ms
+Req_ID: 1113 not received, duration: 7082ms
+Req_ID: 1056 not received, duration: 8512ms
+Req_ID: 1168 not received, duration: 5702ms
+Req_ID: 977 not received, duration: 10494ms
+Req_ID: 1064 not received, duration: 8311ms
+Req_ID: 1070 not received, duration: 8161ms
+Req_ID: 1131 not received, duration: 6630ms
+Req_ID: 1084 not received, duration: 7810ms
+Req_ID: 1138 not received, duration: 6455ms
+Req_ID: 1170 not received, duration: 5652ms
+Req_ID: 1154 not received, duration: 6053ms
+Req_ID: 1002 not received, duration: 9867ms
+Req_ID: 1000 not received, duration: 9917ms
+Req_ID: 968 not received, duration: 10720ms
+Req_ID: 1115 not received, duration: 7032ms
+Req_ID: 1153 not received, duration: 6079ms
+Req_ID: 1189 not received, duration: 5176ms
+Req_ID: 1149 not received, duration: 6179ms
+Req_ID: 1097 not received, duration: 7483ms
+Req_ID: 1194 not received, duration: 5050ms
+Req_ID: 1095 not received, duration: 7534ms
+Req_ID: 1004 not received, duration: 9817ms
+Req_ID: 1079 not received, duration: 7935ms
+Req_ID: 1107 not received, duration: 7233ms
+Req_ID: 979 not received, duration: 10444ms
+Req_ID: 1023 not received, duration: 9340ms
+Req_ID: 1047 not received, duration: 8738ms
+Req_ID: 1094 not received, duration: 7559ms
+Req_ID: 1185 not received, duration: 5276ms
+Req_ID: 970 not received, duration: 10670ms
+Req_ID: 990 not received, duration: 10168ms
+Req_ID: 1193 not received, duration: 5075ms
+Req_ID: 1106 not received, duration: 7258ms
+Req_ID: 1125 not received, duration: 6781ms
+Req_ID: 976 not received, duration: 10519ms
+Req_ID: 1053 not received, duration: 8587ms
+Req_ID: 1037 not received, duration: 8989ms
+Req_ID: 1060 not received, duration: 8412ms
+Req_ID: 1123 not received, duration: 6831ms
+Req_ID: 1188 not received, duration: 5201ms
+Req_ID: 1087 not received, duration: 7734ms
+Req_ID: 1005 not received, duration: 9791ms
+Req_ID: 1104 not received, duration: 7308ms
+Req_ID: 996 not received, duration: 10017ms
+Req_ID: 1165 not received, duration: 5778ms
+Req_ID: 974 not received, duration: 10569ms
+Req_ID: 983 not received, duration: 10343ms
+Req_ID: 1080 not received, duration: 7910ms
+Req_ID: 1020 not received, duration: 9415ms
+Req_ID: 987 not received, duration: 10243ms
+Req_ID: 982 not received, duration: 10369ms
+Req_ID: 1162 not received, duration: 5853ms
+Req_ID: 978 not received, duration: 10469ms
+Req_ID: 1007 not received, duration: 9741ms
+Req_ID: 1013 not received, duration: 9591ms
+Req_ID: 1018 not received, duration: 9465ms
+Req_ID: 997 not received, duration: 9992ms
+Req_ID: 1027 not received, duration: 9239ms
+Req_ID: 1042 not received, duration: 8863ms
+Req_ID: 1044 not received, duration: 8813ms
+Req_ID: 1009 not received, duration: 9691ms
+Req_ID: 980 not received, duration: 10419ms
+Req_ID: 973 not received, duration: 10594ms
+Req_ID: 1066 not received, duration: 8261ms
+Req_ID: 1088 not received, duration: 7709ms
+Req_ID: 1075 not received, duration: 8035ms
+Req_ID: 1126 not received, duration: 6756ms
+Req_ID: 1103 not received, duration: 7333ms
+Req_ID: 1026 not received, duration: 9265ms
+Req_ID: 1108 not received, duration: 7208ms
+Req_ID: 1112 not received, duration: 7107ms
+Req_ID: 1176 not received, duration: 5502ms
+Req_ID: 1178 not received, duration: 5452ms
+Req_ID: 1038 not received, duration: 8964ms
+Req_ID: 1078 not received, duration: 7960ms
+Req_ID: 1098 not received, duration: 7458ms
+Req_ID: 975 not received, duration: 10544ms
+Req_ID: 995 not received, duration: 10042ms
+Req_ID: 1076 not received, duration: 8010ms
+Req_ID: 1001 not received, duration: 9892ms
+Req_ID: 1067 not received, duration: 8236ms
+Req_ID: 1157 not received, duration: 5978ms
+Req_ID: 984 not received, duration: 10318ms
+Req_ID: 1065 not received, duration: 8286ms

@@ -118,15 +118,17 @@ pub struct Replica {
     replica_state: Arc<Mutex<ReplicaState>>,
     id: u8,
     addr: SocketAddr,
+    listen_addr: SocketAddr,
     connections: Vec<SocketAddr>,
     n: u8,
 }
 
 impl Replica {
-    pub fn new(id: u8, addr: SocketAddr, connections: Vec<SocketAddr>, n: u8) -> Self {
+    pub fn new(id: u8, addr: SocketAddr, listen_addr: SocketAddr, connections: Vec<SocketAddr>, n: u8) -> Self {
         return Replica {
             id,
             addr,
+            listen_addr,
             connections,
             replica_state: Arc::new(Mutex::new(ReplicaState {
                 instance_number: 0,
@@ -989,7 +991,7 @@ impl Replica {
     pub fn start(&mut self) -> io::Result<()> {
         smol::block_on(async {
             // listen incoming connections
-            let listener = Async::<TcpListener>::bind(self.addr)?;
+            let listener = Async::<TcpListener>::bind(self.listen_addr)?;
             println!(
                 "Listening to connections on {}",
                 listener.get_ref().local_addr()?

@@ -29,6 +29,10 @@ struct Cli {
     #[arg(short, long, default_value_t = 3)]
     n: u8,
 
+    /// If provided, send other replicas this address to connect instead
+    #[arg(short, long)]
+    public_ip: Option<String>,
+
     /// Client debug mode
     #[arg(short, long, default_value_t = false)]
     debug_client: bool,
@@ -71,9 +75,14 @@ fn main() -> io::Result<()> {
                     exit(0);
                 }
             };
+            let public = match cli.public_ip {
+                Some(p) => SocketAddr::from_str(&p).unwrap(),
+                None => listen_socket,
+            };
             let _res = client::generator_client(
                 socket,
                 listen_socket,
+                public,
                 cli.rate,
                 cli.time_sleep,
                 cli.experiment_time,
@@ -97,10 +106,15 @@ fn main() -> io::Result<()> {
                         }
 
                         // convert String into SocketAddr into Address
-                        let listener = SocketAddr::from_str(&lst).unwrap();
                         match cli.id {
                             Some(id) => {
-                                let mut replica = Replica::new(id, listener, connections, cli.n);
+                                let public_addr = match cli.public_ip {
+                                    Some(ar) => ar,
+                                    None => lst.clone(),
+                                };
+                                let listener = SocketAddr::from_str(&public_addr).unwrap();
+                                let local_addr = SocketAddr::from_str(&lst).unwrap();
+                                let mut replica = Replica::new(id, listener, local_addr, connections, cli.n);
                                 let _res = replica.start();
                             }
                             None => {

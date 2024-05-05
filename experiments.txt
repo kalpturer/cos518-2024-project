@@ -16,3 +16,8 @@ latency:
 -- domestic, 5
 -- global,   5
 
+
+
+virginia:   6000 
+tokyo:      7000 
+london:     8000 

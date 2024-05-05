@@ -118,6 +118,7 @@ pub fn debugging_client(addr: SocketAddr) -> io::Result<()> {
 pub fn generator_client(
     addr: SocketAddr,
     listen_addr: SocketAddr,
+    public_addr: SocketAddr,
     conflict: f64,
     timesleep: u64,
     experiment_time: u64,
@@ -132,27 +133,28 @@ pub fn generator_client(
             let ref mut line = String::new();
             io::BufReader::new(stream).read_line(line).await?;
 
-            println!("Reply received:");
+            // println!("Reply received:");
             // parse
             let json: ClientReply = serde_json::from_str(line.as_str())?;
 
             let mut ts_access = ts.lock().unwrap();
             match json.clone() {
-                ClientReply::Reply(x, id) => match ts_access.get(&id).cloned() {
+                ClientReply::Reply(_, id) => match ts_access.get(&id).cloned() {
                     Some(ms) => {
                         ts_access.remove(&id);
-                        println!(
-                            "Req_ID: {}, reply: {:?}, duration: {}ms",
-                            id,
-                            x,
-                            ms.elapsed().as_millis()
-                        )
+                        println!("{}ms", ms.elapsed().as_millis());
+                        // println!(
+                        //     "Req_ID: {}, reply: {:?}, duration: {}ms",
+                        //     id,
+                        //     x,
+                        //     ms.elapsed().as_millis()
+                        // )
                     }
                     None => (),
                 },
             }
             drop(ts_access);
-            println!("{:?}", json);
+            // println!("{:?}", json);
         }
     }
 
@@ -207,13 +209,13 @@ pub fn generator_client(
             let mut ts_access = time_store.lock().unwrap();
 
             if write_coin {
-                let mes = ReceivedRequest(ClientRequest::Write(key.clone(), key, listen_addr, id));
+                let mes = ReceivedRequest(ClientRequest::Write(key.clone(), key, public_addr, id));
                 let _ = writer
                     .write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes())
                     .await;
                 let _ = writer.write_all("\n".as_bytes()).await;
             } else {
-                let mes = ReceivedRequest(ClientRequest::Read(key, listen_addr, id));
+                let mes = ReceivedRequest(ClientRequest::Read(key, public_addr, id));
                 let _ = writer
                     .write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes())
                     .await;
