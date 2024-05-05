@@ -598,6 +598,9 @@ impl Replica {
                                         );
                                         return Some((union.0, union_keys, true));
                                     } else {
+                                        // not same seq and deps, take slow path 
+                                        let union_keys : HashSet<Instance> = union.1.keys().cloned().collect();
+                                        Replica::update_state(&mut rs, req, union.0, union_keys.clone(), cins, CommandState::Accepted, leader_id);
                                         drop(rs);
                                         return Some((
                                             union.0,
