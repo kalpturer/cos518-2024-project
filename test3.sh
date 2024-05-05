@@ -23,7 +23,7 @@ sleep 1
 # Get its process ID
 PID3=$!
 # Sleep for 5 seconds
-sleep 5
+sleep 10
 
 echo "Finished starting 3 replicas"
 
