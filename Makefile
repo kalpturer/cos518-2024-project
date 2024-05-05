@@ -12,7 +12,16 @@ clean:
 	rm -f *.log
 	rm -f *.err	
 
-test:
-	make clean
-	cargo build
-	bash test.sh
+test3:
+	rm -f id_*
+	rm -f *.log
+	rm -f *.err
+	cargo build --release
+	bash test3.sh
+
+test5:
+	rm -f id_*
+	rm -f *.log
+	rm -f *.err
+	cargo build --release
+	bash test5.sh

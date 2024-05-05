@@ -132,17 +132,17 @@ impl Replica {
 
         let mut log =
             vec![
-                vec!["Empty[----- .................... -----]".to_string(); max_num as usize];
+                vec!["Empty[----- ...................... -----]".to_string(); max_num as usize];
                 n.into()
             ];
         for ((id, num), (req, seq, _, status)) in rs.cmds.clone().into_iter() {
             match req {
                 ClientRequest::Read(key, _, _) => {
                     log[(id - 1) as usize][(num - 1) as usize] = format!(
-                        "{}{}{}, {}{:<3}{}{}",
+                        "{}{}{}{:<3}{}{}{}",
                         "Read-[".to_string(),
                         key_to_string(key),
-                        "Seq: ".to_string(),
+                        ", Seq: ".to_string(),
                         seq,
                         " Status: ".to_string(),
                         status,
@@ -151,10 +151,10 @@ impl Replica {
                 }
                 ClientRequest::Write(key, _, _, _) => {
                     log[(id - 1) as usize][(num - 1) as usize] = format!(
-                        "{}{}{}, {}{:<3}{}{}",
+                        "{}{}{}{:<3}{}{}{}",
                         "Write[".to_string(),
                         key_to_string(key),
-                        "Seq: ".to_string(),
+                        ", Seq: ".to_string(),
                         seq,
                         " Status: ".to_string(),
                         status,
@@ -177,14 +177,18 @@ impl Replica {
         }
         ans.push_str("END CMD LOG: ----------------------------------------------\n");
 
-        ans.push_str("Dependency graph:\n");
-        ans.push_str(format!("{:?}\n", rs.dep_graph).as_str());
-        ans.push_str("\n");
+        // ans.push_str("Dependency graph:\n");
+        // ans.push_str(format!("{:?}\n", rs.dep_graph).as_str());
+        // ans.push_str("\n");
         ans.push_str("Dict Status:\n");
-        ans.push_str(format!("{:?}\n", rs.dict).as_str());
+        let mut sorted_dict: Vec<(String,String)> = rs.dict.clone().into_iter().collect();
+        sorted_dict.sort();
+        ans.push_str(format!("{:?}\n", sorted_dict).as_str());
         ans.push_str("\n");
         ans.push_str("Executed command instances:\n");
-        ans.push_str(format!("{:?}\n", rs.executed).as_str());
+        let mut sorted_exe: Vec<Instance> = rs.executed.clone().into_iter().collect();
+        sorted_exe.sort();
+        ans.push_str(format!("{:?}\n", sorted_exe).as_str());
 
         drop(rs);
         return ans;
