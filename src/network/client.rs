@@ -8,6 +8,7 @@ use smol::{future, io, Async, Unblock};
 use std::collections::HashMap;
 use std::io::{stdout, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::process::exit;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -55,7 +56,7 @@ pub fn debugging_client(addr: SocketAddr) -> io::Result<()> {
         println!("My nickname: {}", stream.get_ref().local_addr()?);
 
         let mut writer = &stream;
-        let mut id: u64 = 0; 
+        let mut id: u64 = 0;
 
         print!("Read or write? (r/w): ");
         let _ = stdout().flush();
@@ -94,7 +95,8 @@ pub fn debugging_client(addr: SocketAddr) -> io::Result<()> {
                         let _ = stdout().flush();
                     } else {
                         mode = "q".to_string();
-                        let mes = ReceivedRequest(ClientRequest::Write(key.clone(), line, addr, id));
+                        let mes =
+                            ReceivedRequest(ClientRequest::Write(key.clone(), line, addr, id));
                         let _ = writer
                             .write_all(serde_json::to_string(&mes).ok().unwrap().as_bytes())
                             .await;
@@ -118,9 +120,12 @@ pub fn generator_client(
     listen_addr: SocketAddr,
     conflict: f64,
     timesleep: u64,
+    experiment_time: u64,
 ) -> io::Result<()> {
-
-    async fn print_incoming(listener: Async<TcpListener>, ts: Arc<Mutex<HashMap<u64, Instant>>>) -> io::Result<()> {
+    async fn print_incoming(
+        listener: Async<TcpListener>,
+        ts: Arc<Mutex<HashMap<u64, Instant>>>,
+    ) -> io::Result<()> {
         loop {
             // Accept the next connection.
             let (stream, _) = listener.accept().await?;
@@ -131,11 +136,20 @@ pub fn generator_client(
             // parse
             let json: ClientReply = serde_json::from_str(line.as_str())?;
 
-            let ts_access = ts.lock().unwrap();
+            let mut ts_access = ts.lock().unwrap();
             match json.clone() {
-                ClientReply::Reply(x, id) => {
-                    println!("{:?}, duration: {}ms", x, ts_access.get(&id).unwrap().elapsed().as_millis())
-                }
+                ClientReply::Reply(x, id) => match ts_access.get(&id).cloned() {
+                    Some(ms) => {
+                        ts_access.remove(&id);
+                        println!(
+                            "Req_ID: {}, reply: {:?}, duration: {}ms",
+                            id,
+                            x,
+                            ms.elapsed().as_millis()
+                        )
+                    }
+                    None => (),
+                },
             }
             drop(ts_access);
             println!("{:?}", json);
@@ -162,9 +176,11 @@ pub fn generator_client(
         let mut writer = &stream;
 
         let fixed = "hello".to_string();
-        let write_percentage = 0.5;
+        let write_percentage = 1.0;
         let mut id: u64 = 0;
 
+        let timer = Duration::from_secs(experiment_time);
+        let start_time = Instant::now();
         loop {
             let mut rng = rand::thread_rng();
             let mut key = fixed.clone();
@@ -176,7 +192,7 @@ pub fn generator_client(
 
             let write_coin = {
                 let wf: f64 = rng.gen();
-                wf < write_percentage
+                wf <= write_percentage
             };
 
             if !conflict_coin {
@@ -209,6 +225,19 @@ pub fn generator_client(
 
             thread::sleep(Duration::from_millis(timesleep));
             id += 1;
+
+            if Instant::now().duration_since(start_time) >= timer {
+                thread::sleep(Duration::from_secs(5));
+                let ts_access = time_store.lock().unwrap();
+                for (req_id, wait_time) in ts_access.clone().into_iter() {
+                    println!(
+                        "Req_ID: {:?} not received, duration: {}ms",
+                        req_id,
+                        wait_time.elapsed().as_millis()
+                    )
+                }
+                exit(0);
+            }
         }
     })
 }

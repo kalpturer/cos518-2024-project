@@ -38,23 +38,27 @@ struct Cli {
     gen: Option<String>,
 
     /// Rate limit in seconds for request generating client
-    #[arg(short, long, default_value_t = 40)] // find the val [FIXME]
+    #[arg(short, long, default_value_t = 20)] // find the val [FIXME]
     time_sleep: u64,
 
     /// Conflict rate [0,1]
-    #[arg(short, long, default_value_t = 0.1)]
+    #[arg(short, long, default_value_t = 0.02)]
     rate: f64,
 
     /// Save - instruct replica to save its state on local disk, all other flags are ignored
     #[arg(short, long)]
     save: Option<String>,
+
+    /// Generate requests as a client for this many seconds
+    #[arg(short, long, default_value_t = 5)] // find the val [FIXME]
+    experiment_time: u64,
 }
 
 fn main() -> io::Result<()> {
     let cli = Cli::parse();
 
-    match (cli.save,cli.gen) {
-        (Some(addr),_) => {
+    match (cli.save, cli.gen) {
+        (Some(addr), _) => {
             let socket = SocketAddr::from_str(&addr).unwrap();
             let _res = client::save_replica_state(socket);
         }
@@ -67,7 +71,13 @@ fn main() -> io::Result<()> {
                     exit(0);
                 }
             };
-            let _res = client::generator_client(socket, listen_socket, cli.rate, cli.time_sleep);
+            let _res = client::generator_client(
+                socket,
+                listen_socket,
+                cli.rate,
+                cli.time_sleep,
+                cli.experiment_time,
+            );
         }
         (None, None) => {
             if (cli.debug_client == false) && cli.connections.len() == usize::from(cli.n - 1) {

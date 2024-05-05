@@ -58,7 +58,7 @@ impl fmt::Display for CommandState {
 #[derive(Debug, Clone)]
 pub struct ReplicaState {
     instance_number: u64,
-    cmds: HashMap<Instance, (ClientRequest, SeqNumber, HashSet<Instance>, CommandState)>, // (cmd, seq, deps, state)
+    cmds: HashMap<Instance, (ClientRequest, SeqNumber, HashSet<Instance>, CommandState, u8)>, // (cmd, seq, deps, state, leader)
     dict: HashMap<String, String>,
     preaccept_replies: HashMap<Instance, Vec<(SeqNumber, HashMap<Instance, bool>)>>,
     naccept: HashMap<Instance, u8>,
@@ -77,11 +77,11 @@ pub enum Event {
     // EPaxos messages: --------------------------------------------------------
     ReceivedRequest(ClientRequest),
     // message(gamma, seq, deps, instance, sender)
-    PreAccept(ClientRequest, u64, CommittedDeps, Instance, SocketAddr),
-    PreAcceptOK(ClientRequest, u64, CommittedDeps, Instance, SocketAddr),
-    Accept(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
-    AcceptOK(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
-    Commit(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr),
+    PreAccept(ClientRequest, u64, CommittedDeps, Instance, SocketAddr, u8),
+    PreAcceptOK(ClientRequest, u64, CommittedDeps, Instance, SocketAddr, u8),
+    Accept(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr, u8),
+    AcceptOK(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr, u8),
+    Commit(ClientRequest, u64, HashSet<Instance>, Instance, SocketAddr, u8),
 }
 
 pub struct Replica {
@@ -135,7 +135,7 @@ impl Replica {
                 vec!["Empty[----- ...................... -----]".to_string(); max_num as usize];
                 n.into()
             ];
-        for ((id, num), (req, seq, _, status)) in rs.cmds.clone().into_iter() {
+        for ((id, num), (req, seq, _, status, _)) in rs.cmds.clone().into_iter() {
             match req {
                 ClientRequest::Read(key, _, _) => {
                     log[(id - 1) as usize][(num - 1) as usize] = format!(
@@ -250,7 +250,7 @@ impl Replica {
         }
     }
 
-    pub fn execute_command(replica_state: Arc<Mutex<ReplicaState>>) -> () {
+    pub fn execute_command(replica_state: Arc<Mutex<ReplicaState>>, replica_id: u8) -> () {
         let mut rs = replica_state.lock().unwrap();
 
         let sccs = kosaraju_scc(&rs.dep_graph);
@@ -267,8 +267,8 @@ impl Replica {
             // execute unexecuted commands in this order
             for node in sc {
                 let ins = rs.dep_graph.node_weight(node).unwrap().clone();
-                let req = match rs.cmds.get(&ins) {
-                    Some((r, _, _, _)) => r,
+                let (req, leader) = match rs.cmds.get(&ins).cloned() {
+                    Some((r, _, _, _, l)) => (r,l),
                     None => return (),
                 };
                 // execute if not already executed
@@ -277,8 +277,11 @@ impl Replica {
                         ClientRequest::Read(key, addr, id) => (rs.dict.get(&key).cloned(), addr, id),
                         ClientRequest::Write(key, val, addr, id) => (rs.dict.insert(key, val), addr, id),
                     };
-                    let mes: ClientReply = ClientReply::Reply(res, id);
-                    smol::spawn(Replica::reply_to_client(mes, addr)).detach();
+                    // reply if you are the leader
+                    if leader == replica_id {
+                        let mes: ClientReply = ClientReply::Reply(res, id);
+                        smol::spawn(Replica::reply_to_client(mes, addr)).detach();
+                    }
                     // mark executed
                     rs.executed.insert(ins);
                 }
@@ -295,10 +298,11 @@ impl Replica {
         cdeps: HashSet<Instance>,
         cins: Instance,
         cmd_state: CommandState,
+        leader: u8,
     ) {
         rs.cmds.insert(
             cins,
-            (req.clone(), cseq, cdeps.clone(), cmd_state),
+            (req.clone(), cseq, cdeps.clone(), cmd_state, leader),
         );
 
         // add dependencies to dep_graph
@@ -320,6 +324,7 @@ impl Replica {
         cseq: SeqNumber,
         cdeps: HashMap<Instance, bool>,
         cins: Option<Instance>,
+        leader_id: u8,
     ) -> (SeqNumber, HashMap<Instance, bool>, Instance) {
         let mut rs = replica_state.lock().unwrap();
 
@@ -340,7 +345,7 @@ impl Replica {
             }
         }
 
-        for (i, (ireq, sn, _, status)) in rs.cmds.clone().into_iter() {
+        for (i, (ireq, sn, _, status, _)) in rs.cmds.clone().into_iter() {
             if Replica::interfere(req.clone(), ireq) {
                 seq = max(seq, 1 + sn);
                 if status == CommandState::PreAccepted {
@@ -355,7 +360,7 @@ impl Replica {
         match cins {
             Some(cins) => {
                 // replica_id is not command leader
-                Replica::update_state(&mut rs, req, seq, deps_keys, cins, CommandState::PreAccepted);
+                Replica::update_state(&mut rs, req, seq, deps_keys, cins, CommandState::PreAccepted, leader_id);
 
                 // if replica_id is not the command leader, then no need to track number of preaccepts
 
@@ -369,7 +374,7 @@ impl Replica {
                 // replica_id is command leader
                 rs.instance_number += 1;
                 let ins = rs.instance_number;
-                Replica::update_state(&mut rs, req, seq, deps_keys, (replica_id, ins), CommandState::PreAccepted);
+                Replica::update_state(&mut rs, req, seq, deps_keys, (replica_id, ins), CommandState::PreAccepted, leader_id);
                 
                 rs.preaccept_replies.insert((replica_id, ins), Vec::new());
                 drop(rs);
@@ -388,6 +393,7 @@ impl Replica {
         cseq: SeqNumber,
         cdeps: HashMap<Instance, bool>,
         cins: Instance,
+        leader_id: u8,
     ) -> Option<(SeqNumber, HashSet<Instance>, bool)> {
         let mut rs = replica_state.lock().unwrap();
         let preaccept_replies = rs.preaccept_replies.get(&cins).cloned();
@@ -405,7 +411,7 @@ impl Replica {
                                 if n == 3 {
                                     // always take fast path and commit
                                     let cdeps_keys: HashSet<Instance> = cdeps.keys().cloned().collect(); 
-                                    Replica::update_state(&mut rs, req, cseq, cdeps_keys.clone(), cins, CommandState::Committed);
+                                    Replica::update_state(&mut rs, req, cseq, cdeps_keys.clone(), cins, CommandState::Committed, leader_id);
                                     drop(rs);
 
                                     println!("{}", Replica::format_log(n, replica_state.clone()));
@@ -462,7 +468,7 @@ impl Replica {
 
                                                             // [FIXME] update command state to accepted
                                                             let union_keys : HashSet<Instance> = union.1.keys().cloned().collect();
-                                                            Replica::update_state(&mut rs, req, union.0, union_keys.clone(), cins, CommandState::Accepted);
+                                                            Replica::update_state(&mut rs, req, union.0, union_keys.clone(), cins, CommandState::Accepted, leader_id);
                                                             drop(rs);
                                                             return Some((union.0, union_keys, false));
                                                         } else {
@@ -472,7 +478,7 @@ impl Replica {
                                                         // no one has committed this dependence
                                                         // so must take slow path
                                                         let union_keys : HashSet<Instance> = union.1.keys().cloned().collect();
-                                                        Replica::update_state(&mut rs, req, union.0, union_keys.clone(), cins, CommandState::Accepted);
+                                                        Replica::update_state(&mut rs, req, union.0, union_keys.clone(), cins, CommandState::Accepted, leader_id);
                                                         drop(rs);
                                                         return Some((
                                                             union.0,
@@ -487,7 +493,7 @@ impl Replica {
                                         // all seq and deps are the same, and every dep has some replica that has
                                         // committed it; take fast path
                                         let union_keys: HashSet<Instance> = union.1.keys().cloned().collect(); 
-                                        Replica::update_state(&mut rs, req, union.0, union_keys.clone(), cins, CommandState::Committed);
+                                        Replica::update_state(&mut rs, req, union.0, union_keys.clone(), cins, CommandState::Committed, leader_id);
                                         drop(rs);
 
                                         println!("{}", Replica::format_log(n, replica_state.clone()));
@@ -534,10 +540,11 @@ impl Replica {
         cseq: u64,
         cdeps: HashSet<(u8, u64)>,
         cins: (u8, u64),
-        cmd_state: CommandState
+        cmd_state: CommandState,
+        leader_id: u8,
     ) -> () {
         let mut rs = replica_state.lock().unwrap();
-        Replica::update_state(&mut rs, req, cseq, cdeps, cins, cmd_state);
+        Replica::update_state(&mut rs, req, cseq, cdeps, cins, cmd_state, leader_id);
         drop(rs);
     }
 
@@ -547,7 +554,8 @@ impl Replica {
         req: ClientRequest,
         cseq: SeqNumber,
         cdeps: HashSet<Instance>,
-        cins: Instance
+        cins: Instance,
+        leader_id: u8,
     ) -> bool {
         let mut rs = replica_state.lock().unwrap();
         match rs.cmds.get(&cins).cloned() {
@@ -563,7 +571,7 @@ impl Replica {
                             rs.naccept.insert(cins, naccept + 1);
                             if naccept >= n / 2 {
                                 // commit
-                                Replica::update_state(&mut rs, req, cseq, cdeps, cins, CommandState::Committed);
+                                Replica::update_state(&mut rs, req, cseq, cdeps, cins, CommandState::Committed, leader_id);
                                 drop(rs);
 
                                 println!("{}", Replica::format_log(n, replica_state.clone()));
@@ -639,6 +647,7 @@ impl Replica {
                         1,
                         HashMap::new(),
                         None,
+                        replica_id,
                     );
 
                     // Send PreAccept to all:
@@ -647,7 +656,7 @@ impl Replica {
                             committed: deps.clone(),
                         };
                         let message =
-                            Event::PreAccept(req.clone(), seq, deps.clone(), ins, replica_addr);
+                            Event::PreAccept(req.clone(), seq, deps.clone(), ins, replica_addr, replica_id);
 
                         let _ = stream
                             .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())
@@ -657,7 +666,7 @@ impl Replica {
                         println!("Sent {:?} to {}", message, stream.get_ref().peer_addr()?);
                     }
                 }
-                Event::PreAccept(req, cseq, cdeps, cins, leader) => {
+                Event::PreAccept(req, cseq, cdeps, cins, leader_addr, leader_id) => {
                     let (seq, deps, _) = Replica::atomic_request_preaccept(
                         replica_id,
                         replica_state.clone(),
@@ -665,14 +674,15 @@ impl Replica {
                         cseq,
                         cdeps.committed,
                         Some(cins),
+                        leader_id
                     );
 
-                    let stream = streams.get_mut(&leader).unwrap();
+                    let stream = streams.get_mut(&leader_addr).unwrap();
                     let deps: CommittedDeps = CommittedDeps {
                         committed: deps.clone(),
                     };
                     let message =
-                        Event::PreAcceptOK(req.clone(), seq, deps.clone(), cins, replica_addr);
+                        Event::PreAcceptOK(req.clone(), seq, deps.clone(), cins, replica_addr, leader_id);
 
                     let _ = stream
                         .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())
@@ -681,13 +691,13 @@ impl Replica {
 
                     println!("Replied {:?} to {}", message, stream.get_ref().peer_addr()?);
                 }
-                Event::PreAcceptOK(req, cseq, cdeps, cins, _) => {
-                    let path = Replica::path(n, replica_state.clone(), req.clone(), cseq, cdeps.committed, cins);
+                Event::PreAcceptOK(req, cseq, cdeps, cins, _, leader_id) => {
+                    let path = Replica::path(n, replica_state.clone(), req.clone(), cseq, cdeps.committed, cins, leader_id);
                     match path {
                         // either take fast or slow
                         Some((seq, deps, take_fast)) => {
                             if take_fast {
-                                Replica::execute_command(replica_state.clone());
+                                Replica::execute_command(replica_state.clone(), replica_id);
 
                                 // notify other replicas about the commit
                                 for (_, stream) in streams.iter_mut() {
@@ -697,6 +707,7 @@ impl Replica {
                                         deps.clone(),
                                         cins,
                                         replica_addr,
+                                        leader_id,
                                     );
 
                                     let _ = stream
@@ -719,7 +730,7 @@ impl Replica {
                                 // notify other replicas about the accept
                                 for (_, stream) in streams.iter_mut() {
                                     let message =
-                                        Event::Accept(req.clone(), seq, deps.clone(), cins, replica_addr);
+                                        Event::Accept(req.clone(), seq, deps.clone(), cins, replica_addr, leader_id);
 
                                     let _ = stream
                                         .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())
@@ -734,18 +745,18 @@ impl Replica {
                         None => ()
                     }
                 }
-                Event::Commit(req, cseq, cdeps, cins, _) => {
-                    Replica::atomic_update_state(replica_state.clone(), req, cseq, cdeps, cins, CommandState::Committed);
+                Event::Commit(req, cseq, cdeps, cins, _, leader_id) => {
+                    Replica::atomic_update_state(replica_state.clone(), req, cseq, cdeps, cins, CommandState::Committed, leader_id);
                     println!("{}", Replica::format_log(n, replica_state.clone()));
-                    Replica::execute_command(replica_state.clone());
+                    Replica::execute_command(replica_state.clone(), replica_id);
                 }
-                Event::Accept(req, cseq, cdeps, cins, leader) => {
-                    Replica::atomic_update_state(replica_state.clone(), req.clone(), cseq, cdeps.clone(), cins, CommandState::Accepted);
+                Event::Accept(req, cseq, cdeps, cins, leader_addr, leader_id) => {
+                    Replica::atomic_update_state(replica_state.clone(), req.clone(), cseq, cdeps.clone(), cins, CommandState::Accepted, leader_id);
 
                     // reply to leader
-                    let stream = streams.get_mut(&leader).unwrap();
+                    let stream = streams.get_mut(&leader_addr).unwrap();
                     let message =
-                        Event::AcceptOK(req, cseq, cdeps, cins, replica_addr);
+                        Event::AcceptOK(req, cseq, cdeps, cins, replica_addr, leader_id);
 
                     let _ = stream
                         .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())
@@ -754,15 +765,15 @@ impl Replica {
 
                     println!("Replied {:?} to {}", message, stream.get_ref().peer_addr()?);
                 }
-                Event::AcceptOK(req, cseq, cdeps, cins, _) => {
-                    let commit = Replica::atomic_accept(n, replica_state.clone(), req.clone(), cseq, cdeps.clone(), cins);
+                Event::AcceptOK(req, cseq, cdeps, cins, _, leader_id) => {
+                    let commit = Replica::atomic_accept(n, replica_state.clone(), req.clone(), cseq, cdeps.clone(), cins, leader_id);
                     if commit {
-                        Replica::execute_command(replica_state.clone());
+                        Replica::execute_command(replica_state.clone(), replica_id);
 
                         // notify other replicas about the commit
                         for (_, stream) in streams.iter_mut() {
                             let message =
-                                Event::Commit(req.clone(), cseq, cdeps.clone(), cins, replica_addr);
+                                Event::Commit(req.clone(), cseq, cdeps.clone(), cins, replica_addr, leader_id);
 
                             let _ = stream
                                 .write_all(serde_json::to_string(&message).ok().unwrap().as_bytes())

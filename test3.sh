@@ -1,5 +1,7 @@
 #!/bin/bash
 
+experiment_len=30
+
 echo "Starting 3 replicas"
 
 # Start replica 1
@@ -28,27 +30,26 @@ echo "Finished starting 3 replicas"
 
 echo "Starting 3 client request generators"
 # Start 3 clients, one for each replica that generate random requests
-./target/release/project --gen 127.0.0.1:6000 --listener 127.0.0.1:6001 > client1.log 2>&1 &
+./target/release/project --gen 127.0.0.1:6000 --experiment_time $experiment_len --listener 127.0.0.1:6001 > client1.log 2>&1 &
 PID4=$!
 #sleep 5
 
-./target/release/project --gen 127.0.0.1:8000 --listener 127.0.0.1:8001 > client2.log 2>&1 &
+./target/release/project --gen 127.0.0.1:8000 --experiment_time $experiment_len --listener 127.0.0.1:8001 > client2.log 2>&1 &
 PID5=$!
 #sleep 5
 
-./target/release/project --gen 127.0.0.1:9000 --listener 127.0.0.1:9001 > client3.log 2>&1 &
+./target/release/project --gen 127.0.0.1:9000 --experiment_time $experiment_len --listener 127.0.0.1:9001 > client3.log 2>&1 &
 PID6=$!
 #sleep 5
 echo "Finished starting 3 client request generators"
 
 echo "Sleeping for 5 seconds"
 # Sleep for 30 seconds
-sleep 30
+
+sleep $experiment_len
 echo "Finished sleeping"
 
-kill $PID4 $PID5 $PID6 
-
-sleep 30
+sleep 10
 
 
 echo "Saving replica states"
