@@ -1,0 +1,302 @@
+Listening to connections on 172.31.25.220:6001
+Connected to 54.214.191.51:6000
+224ms
+252ms
+820ms
+1922ms
+3225ms
+3726ms
+3626ms
+2926ms
+2127ms
+1226ms
+225ms
+1627ms
+1727ms
+1427ms
+3029ms
+1327ms
+3129ms
+3830ms
+2829ms
+2229ms
+727ms
+2329ms
+1829ms
+2030ms
+2731ms
+429ms
+3332ms
+2431ms
+330ms
+2532ms
+1131ms
+3433ms
+2633ms
+1531ms
+532ms
+933ms
+632ms
+3536ms
+1033ms
+3937ms
+358ms
+659ms
+258ms
+460ms
+560ms
+162ms
+260ms
+164ms
+157ms
+258ms
+154ms
+259ms
+281ms
+483ms
+386ms
+186ms
+154ms
+258ms
+644ms
+344ms
+449ms
+551ms
+251ms
+260ms
+462ms
+165ms
+567ms
+371ms
+165ms
+268ms
+165ms
+270ms
+268ms
+170ms
+277ms
+382ms
+363ms
+264ms
+665ms
+566ms
+467ms
+167ms
+254ms
+3439ms
+536ms
+3041ms
+2541ms
+1641ms
+2642ms
+1041ms
+2043ms
+3145ms
+3245ms
+2244ms
+2845ms
+1443ms
+2945ms
+343ms
+845ms
+2446ms
+2747ms
+945ms
+1947ms
+1547ms
+1147ms
+3350ms
+2349ms
+1248ms
+1348ms
+2149ms
+248ms
+1850ms
+749ms
+448ms
+1750ms
+650ms
+307ms
+212ms
+414ms
+1036ms
+735ms
+536ms
+237ms
+838ms
+939ms
+339ms
+439ms
+646ms
+460ms
+362ms
+268ms
+568ms
+461ms
+661ms
+964ms
+364ms
+866ms
+766ms
+1668ms
+1267ms
+1368ms
+584ms
+1586ms
+285ms
+1487ms
+1086ms
+1187ms
+1307ms
+508ms
+1709ms
+1108ms
+1809ms
+1609ms
+1209ms
+2111ms
+232ms
+833ms
+633ms
+1534ms
+1934ms
+2235ms
+933ms
+1033ms
+2335ms
+1434ms
+2035ms
+433ms
+333ms
+734ms
+829ms
+629ms
+1330ms
+529ms
+930ms
+1648ms
+347ms
+751ms
+1552ms
+451ms
+252ms
+1052ms
+1753ms
+1453ms
+1153ms
+1254ms
+Req_ID: 265 not received, duration: 8503ms
+Req_ID: 288 not received, duration: 6201ms
+Req_ID: 214 not received, duration: 13612ms
+Req_ID: 260 not received, duration: 9004ms
+Req_ID: 284 not received, duration: 6601ms
+Req_ID: 244 not received, duration: 10605ms
+Req_ID: 290 not received, duration: 6001ms
+Req_ID: 193 not received, duration: 15714ms
+Req_ID: 212 not received, duration: 13812ms
+Req_ID: 202 not received, duration: 14813ms
+Req_ID: 217 not received, duration: 13312ms
+Req_ID: 237 not received, duration: 11306ms
+Req_ID: 269 not received, duration: 8103ms
+Req_ID: 274 not received, duration: 7603ms
+Req_ID: 271 not received, duration: 7903ms
+Req_ID: 240 not received, duration: 11006ms
+Req_ID: 281 not received, duration: 6902ms
+Req_ID: 232 not received, duration: 11807ms
+Req_ID: 231 not received, duration: 11907ms
+Req_ID: 295 not received, duration: 5501ms
+Req_ID: 197 not received, duration: 15314ms
+Req_ID: 286 not received, duration: 6402ms
+Req_ID: 262 not received, duration: 8804ms
+Req_ID: 199 not received, duration: 15114ms
+Req_ID: 258 not received, duration: 9204ms
+Req_ID: 210 not received, duration: 14013ms
+Req_ID: 263 not received, duration: 8704ms
+Req_ID: 200 not received, duration: 15014ms
+Req_ID: 230 not received, duration: 12011ms
+Req_ID: 270 not received, duration: 8003ms
+Req_ID: 280 not received, duration: 7002ms
+Req_ID: 253 not received, duration: 9705ms
+Req_ID: 292 not received, duration: 5801ms
+Req_ID: 261 not received, duration: 8904ms
+Req_ID: 191 not received, duration: 15915ms
+Req_ID: 285 not received, duration: 6502ms
+Req_ID: 296 not received, duration: 5401ms
+Req_ID: 272 not received, duration: 7803ms
+Req_ID: 221 not received, duration: 12912ms
+Req_ID: 227 not received, duration: 12311ms
+Req_ID: 187 not received, duration: 16315ms
+Req_ID: 198 not received, duration: 15214ms
+Req_ID: 246 not received, duration: 10406ms
+Req_ID: 267 not received, duration: 8304ms
+Req_ID: 224 not received, duration: 12612ms
+Req_ID: 251 not received, duration: 9905ms
+Req_ID: 203 not received, duration: 14714ms
+Req_ID: 278 not received, duration: 7203ms
+Req_ID: 279 not received, duration: 7103ms
+Req_ID: 273 not received, duration: 7703ms
+Req_ID: 211 not received, duration: 13913ms
+Req_ID: 196 not received, duration: 15414ms
+Req_ID: 255 not received, duration: 9505ms
+Req_ID: 264 not received, duration: 8604ms
+Req_ID: 245 not received, duration: 10506ms
+Req_ID: 190 not received, duration: 16015ms
+Req_ID: 223 not received, duration: 12712ms
+Req_ID: 218 not received, duration: 13213ms
+Req_ID: 282 not received, duration: 6803ms
+Req_ID: 189 not received, duration: 16115ms
+Req_ID: 225 not received, duration: 12512ms
+Req_ID: 185 not received, duration: 16516ms
+Req_ID: 208 not received, duration: 14214ms
+Req_ID: 228 not received, duration: 12212ms
+Req_ID: 277 not received, duration: 7303ms
+Req_ID: 229 not received, duration: 12112ms
+Req_ID: 186 not received, duration: 16416ms
+Req_ID: 235 not received, duration: 11507ms
+Req_ID: 195 not received, duration: 15515ms
+Req_ID: 207 not received, duration: 14314ms
+Req_ID: 234 not received, duration: 11607ms
+Req_ID: 252 not received, duration: 9806ms
+Req_ID: 216 not received, duration: 13413ms
+Req_ID: 249 not received, duration: 10106ms
+Req_ID: 206 not received, duration: 14414ms
+Req_ID: 220 not received, duration: 13013ms
+Req_ID: 257 not received, duration: 9305ms
+Req_ID: 294 not received, duration: 5602ms
+Req_ID: 256 not received, duration: 9405ms
+Req_ID: 201 not received, duration: 14914ms
+Req_ID: 248 not received, duration: 10206ms
+Req_ID: 222 not received, duration: 12813ms
+Req_ID: 297 not received, duration: 5301ms
+Req_ID: 259 not received, duration: 9105ms
+Req_ID: 299 not received, duration: 5101ms
+Req_ID: 219 not received, duration: 13113ms
+Req_ID: 250 not received, duration: 10006ms
+Req_ID: 243 not received, duration: 10707ms
+Req_ID: 254 not received, duration: 9606ms
+Req_ID: 291 not received, duration: 5902ms
+Req_ID: 226 not received, duration: 12412ms
+Req_ID: 241 not received, duration: 10907ms
+Req_ID: 233 not received, duration: 11708ms
+Req_ID: 213 not received, duration: 13714ms
+Req_ID: 205 not received, duration: 14514ms
+Req_ID: 283 not received, duration: 6703ms
+Req_ID: 215 not received, duration: 13513ms
+Req_ID: 268 not received, duration: 8204ms
+Req_ID: 293 not received, duration: 5702ms
+Req_ID: 204 not received, duration: 14615ms
+Req_ID: 276 not received, duration: 7404ms
+Req_ID: 194 not received, duration: 15615ms
+Req_ID: 242 not received, duration: 10807ms
+Req_ID: 266 not received, duration: 8405ms
+Req_ID: 188 not received, duration: 16216ms
+Req_ID: 192 not received, duration: 15816ms
+Req_ID: 275 not received, duration: 7504ms
+Req_ID: 298 not received, duration: 5202ms
+Req_ID: 247 not received, duration: 10307ms
+Req_ID: 239 not received, duration: 11107ms
+Req_ID: 236 not received, duration: 11408ms
+Req_ID: 209 not received, duration: 14114ms
+Req_ID: 289 not received, duration: 6103ms
+Req_ID: 238 not received, duration: 11208ms
+Req_ID: 287 not received, duration: 6303ms
