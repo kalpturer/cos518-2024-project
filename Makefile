@@ -17,11 +17,11 @@ test3:
 	rm -f *.log
 	rm -f *.err
 	cargo build --release
-	bash test3.sh
+	bash ./test_scripts/test3.sh
 
 test5:
 	rm -f id_*
 	rm -f *.log
 	rm -f *.err
 	cargo build --release
-	bash test5.sh
+	bash ./test_scripts/test5.sh

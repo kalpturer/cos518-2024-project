@@ -18,3 +18,5 @@ Cargo.lock
 *.err
 *.log
 id_*
+.ipynb_checkpoints
+.zip
