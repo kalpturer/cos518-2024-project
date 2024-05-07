@@ -2,7 +2,7 @@
 
 ### Instructions 
  1) run `cargo build` to build the project
- 2) 
+ 2) usage instructions:
  ```
  Usage: project [OPTIONS]
 
