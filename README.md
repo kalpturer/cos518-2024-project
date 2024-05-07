@@ -1,4 +1,4 @@
-# cos518-2024-project : EPaxos Reimplementation and Evaluation
+# EPaxos Reimplementation and Evaluation
 
 ### Instructions 
  1) run `cargo build` to build the project
